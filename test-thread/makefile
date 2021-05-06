@@ -7,8 +7,7 @@ LDFLAGS = -L.
 OPTFLAGS = -O3 
 LIBS = -lpthread
 
-TARGETS = mainserver \
-          mainclient
+TARGETS = main
 
 
 .SUFFIXES: .c .h
@@ -21,12 +20,6 @@ TARGETS = mainserver \
 	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -c -o $@ $<
 
 all : $(TARGETS)
-
-valgrind-server-test:
-	valgrind --leak-check=full ./mainserver
-
-valgrind-client-test:
-	valgrind --leak-check=full ./mainclient
 
 clean :
 	rm -f $(TARGETS)
