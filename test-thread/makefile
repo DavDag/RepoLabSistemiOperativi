@@ -21,5 +21,8 @@ TARGETS = main
 
 all : $(TARGETS)
 
+valgrind-test:
+	valgrind --leak-check=full ./main
+
 clean :
 	rm -f $(TARGETS)
