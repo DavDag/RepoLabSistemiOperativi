@@ -7,8 +7,8 @@ LDFLAGS = -L.
 OPTFLAGS = -O3 
 LIBS = -lpthread
 
-TARGETS = main_ls \
-			main_append
+TARGETS = main
+
 
 .SUFFIXES: .c .h
 
@@ -22,7 +22,7 @@ TARGETS = main_ls \
 all : $(TARGETS)
 
 valgrind-test:
-	valgrind --leak-check=full ./main "./testdir"
+	valgrind --leak-check=full ./main
 
 clean :
 	rm -f $(TARGETS)
