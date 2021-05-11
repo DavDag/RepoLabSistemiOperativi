@@ -4,6 +4,8 @@ EXE := $(BINARIES_DIR)/main
 INCLUDES += -I "../serverapi/include"
 LIBS += -L$(SERVERAPI_LIB_DIR) -lserverapi -Wl,-rpath=$(SERVERAPI_LIB_DIR)
 
+.PHONY: all
+
 all: $(EXE)
 
 valgrind-test:
@@ -19,7 +21,7 @@ $(BINARIES_DIR):
 	mkdir -p $@
 
 $(EXE): $(OBJECTS) | $(BINARIES_DIR)
-	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS) 
 
 $(OBJECTS_DIR)/%.o: $(SOURCES_DIR)/%.c | $(OBJECTS_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -c -o $@ $<

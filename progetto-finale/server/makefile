@@ -2,6 +2,8 @@ SOURCES := $(wildcard $(SOURCES_DIR)/*.c)
 OBJECTS := $(SOURCES:$(SOURCES_DIR)/%.c=$(OBJECTS_DIR)/%.o)
 EXE := $(BINARIES_DIR)/main
 
+.PHONY: all
+
 all: $(EXE)
 
 valgrind-test:

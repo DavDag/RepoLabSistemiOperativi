@@ -3,6 +3,8 @@ EXE := $(BINARIES_DIR)/libserverapi.so
 
 LDFLAGS += -shared
 
+.PHONY: all
+
 all: $(EXE)
 
 clean:
