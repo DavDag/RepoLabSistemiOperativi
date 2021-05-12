@@ -8,32 +8,32 @@
 #include <common.h>
 #include <serverapi.h>
 #include "client.h"
-#include "testing.h"
-
-#define MAX_NUM_OPTIONS 128
 
 int main(int argc, char **argv) {
     set_log_level(LOG_LEVEL_INFO);
 
-    TestMode_t test_mode = TEST_NONE;
-    CmdLineOpt_t options[MAX_NUM_OPTIONS];
-
-    // Check for testing argument
-    if (argc > 2 && strcmp("-T", argv[1]) == 0) {
-        if (handle_test_argument_option(&test_mode, argv[2]) == RES_OK) {
-            // TODO
+    // Parse and (possibly) handle arguments
+    int opt = -1, optIndex = 0, optionsSize = (argc / 2) + 2; // MAX options are 1(filename) + 1(-h) + 1(-p) + 1/2(argc)
+    CmdLineOpt_t options[optionsSize];
+    while((opt = getopt(argc, argv, "hf:w:W:D:r:R::d:t:l:u:c:p" "L:")) != -1) {
+        // Try parsing argument
+        if (parse_param_option(&options[optIndex], opt, optarg) == RES_ERROR) {
+            LOG_CRIT("Client process terminated while parsing arguments.");
+            exit(EXIT_FAILURE);
         }
-        argc -= 2;
-        argv += 2;
+
+        // Handle requests that have priority
+        can_handle_option_before_start(options[optIndex].type) ? handle_option(options[optIndex]) : optIndex++;
     }
 
-    // Parse and handle arguments
-    int opt, optIndex = 0;
-    while((opt = getopt(argc, argv, "hf:w:W:D:r:R::d:t:l:u:c:p")) != -1) {
-        handle_param_option(&options[optIndex], opt, optarg);
+    // Handle requests
+    for (int i = 0; i < optIndex; ++i) {
+        // Try handling option
+        if (handle_option(options[i]) == RES_ERROR) {
+            LOG_CRIT("Client process terminated while handling arguments.");
+            exit(EXIT_FAILURE);
+        }
     }
-
-    // Cleanup and log (if needed)
 
     return EXIT_SUCCESS;
 }

@@ -25,21 +25,25 @@
 #define LOG_INFO(...) LOG_INFO_INTO_STREAM(stdout, __VA_ARGS__)
 #define LOG_VERB(...) LOG_VERB_INTO_STREAM(stdout, __VA_ARGS__)
 
-static int g_log_level = LOG_LEVEL_VERBOSE;
+__attribute__((unused))
+void set_log_level(int new_level);
 
 __attribute__((unused))
-static void set_log_level(int new_level) {
-    g_log_level = new_level;
-}
+int get_log_level();
 
 __attribute__((unused))
 static void custom_log(FILE *stream, int loglevel, const char* file, const int line, const char *fmt, ...) {
     // Constants
     static const char * const DESCR[] = { "C", "E", "W", "I", "V" };
+
+#ifndef LOG_WITHOUT_COLORS
     static const char * const COLOR[] = { "\033[91m", "\033[31m", "\033[33m", "\033[0m", "\033[2m", "\033[0m" };
+#else
+    static const char * const COLOR[] = { "", "", "", "", "", "" };
+#endif
     
     // Filter based on loglevel
-    if (g_log_level < loglevel || (loglevel < 0 || loglevel > 4)) return;
+    if (get_log_level() < loglevel || (loglevel < 0 || loglevel > 4)) return;
 
     // Add logging infos
 #ifdef LOG_TIMESTAMP
@@ -59,9 +63,6 @@ static void custom_log(FILE *stream, int loglevel, const char* file, const int l
     vfprintf(stream, fmt, args);
     va_end(args);
 
-    // Add newline
-    fprintf(stream, "\n%s", COLOR[5]);
-
-    // Force flush
-    fflush(stream);
+    // Add newline, reset color
+    fprintf(stream, "%s\n", COLOR[5]);
 }

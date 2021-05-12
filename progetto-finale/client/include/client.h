@@ -4,6 +4,8 @@
 
 typedef enum {
     OPT_NONE               =  0, // Default
+    
+    // Requested
     OPT_HELP_ENABLED       =  1, // "-h" Print usage (help).
     OPT_SOCKET_FILE        =  2, // "-f" Socket file path.
     OPT_WRITE_DIR_REQ      =  3, // "-w" Send directory to server.
@@ -17,6 +19,10 @@ typedef enum {
     OPT_UNLOCK_FILE_REQ    = 11, // "-u" Send file/s unlock request to server.
     OPT_REMOVE_FILE_REQ    = 12, // "-c" Remove file/s from server.
     OPT_LOG_ENABLED        = 13, // "-p" Enable debug output.
+
+    // Custom
+    OPT_CHANGE_LOG_LEVEL   = 20, // "-L" Change log level from here on
+
 } CmdLineOptType_t;
 
 typedef struct {
@@ -43,9 +49,13 @@ typedef struct {
             const char** files;
         };
 
-        // -R, -t
+        // -R, -t, -L
         int val;
     };
 } CmdLineOpt_t;
 
-Result_t handle_param_option(CmdLineOpt_t *, int, const char*);
+Result_t parse_param_option(CmdLineOpt_t *, int, const char*);
+
+int can_handle_option_before_start(CmdLineOptType_t type);
+
+Result_t handle_option(CmdLineOpt_t option);

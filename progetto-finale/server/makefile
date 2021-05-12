@@ -2,6 +2,8 @@ SOURCES := $(wildcard $(SOURCES_DIR)/*.c)
 OBJECTS := $(SOURCES:$(SOURCES_DIR)/%.c=$(OBJECTS_DIR)/%.o)
 EXE := $(BINARIES_DIR)/main
 
+LIBS += -L$(COMMON_LIB_DIR) -lcommon
+
 .PHONY: all
 
 all: $(EXE)
