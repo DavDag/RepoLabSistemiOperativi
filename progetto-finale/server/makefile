@@ -1,5 +1,4 @@
-SOURCES := $(wildcard $(SOURCES_DIR)/*.c)
-OBJECTS := $(SOURCES:$(SOURCES_DIR)/%.c=$(OBJECTS_DIR)/%.o)
+OBJECTS := $(patsubst $(SOURCES_DIR)/%.c,$(OBJECTS_DIR)/%.o,$(wildcard $(SOURCES_DIR)/*.c))
 EXE := $(BINARIES_DIR)/main
 
 LIBS += -L$(COMMON_LIB_DIR) -lcommon
@@ -8,8 +7,14 @@ LIBS += -L$(COMMON_LIB_DIR) -lcommon
 
 all: $(EXE)
 
+simple-run:
+	$(EXE) $(ARGS)
+
 valgrind-test:
-	valgrind --leak-check=full $(EXE)
+	valgrind --leak-check=full $(EXE) $(ARGS)
+
+valgrind-test-quiet:
+	valgrind --leak-check=full --quiet $(EXE) $(ARGS)
 
 clean:
 	rm -rf $(BINARIES_DIR) $(OBJECTS_DIR)

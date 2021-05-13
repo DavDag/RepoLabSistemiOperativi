@@ -8,8 +8,14 @@ LIBS += -L$(COMMON_LIB_DIR) -lcommon -L$(SERVERAPI_LIB_DIR) -lserverapi -Wl,-rpa
 
 all: $(EXE)
 
+simple-run:
+	$(EXE) $(ARGS)
+
 valgrind-test:
-	valgrind --leak-check=full $(EXE)
+	valgrind --leak-check=full $(EXE) $(ARGS)
+
+valgrind-test-quiet:
+	valgrind --leak-check=full --quiet $(EXE) $(ARGS)
 
 clean: $(BINARIES_DIR)
 	rm -rf $(BINARIES_DIR) $(OBJECTS_DIR)

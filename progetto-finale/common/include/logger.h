@@ -25,10 +25,7 @@
 #define LOG_INFO(...) LOG_INFO_INTO_STREAM(stdout, __VA_ARGS__)
 #define LOG_VERB(...) LOG_VERB_INTO_STREAM(stdout, __VA_ARGS__)
 
-__attribute__((unused))
 void set_log_level(int new_level);
-
-__attribute__((unused))
 int get_log_level();
 
 __attribute__((unused))

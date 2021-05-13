@@ -1,4 +1,4 @@
-MAKEFLAGS += -s
+# MAKEFLAGS += -s
 
 CC       =  gcc
 CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors
@@ -7,7 +7,7 @@ LDFLAGS  =
 LIBS     = 
 OPTFLAGS = -g
 AR       =  ar
-ARFLAGS  =  crs
+ARFLAGS  =  rvs
 
 SOURCES_DIR  := src
 OBJECTS_DIR  := obj
@@ -40,33 +40,38 @@ test3:
 #
 # Shortcuts to run binaries
 #
-
 run-client:
-	./client/bin/main
+	$(MAKE) -C client simple-run ARGS="-h -p"
 
 run-valgrind-client:
-	$(MAKE) valgrind-test -C ./client
+	$(MAKE) -C client valgrind-test ARGS="-h -p"
 
 run-server:
-	./server/bin/main
+	$(MAKE) -C server simple-run ARGS="-h -p"
 
 run-valgrind-server:
-	$(MAKE) valgrind-test -C ./server
+	$(MAKE) -C server valgrind-test ARGS="-h -p"
 
 #
 # Testing
 #
 test-client-args:
-	./client/bin/main -f ./dir/file
-	./client/bin/main -w ./dir -w ./dir,n=32
-	./client/bin/main -W ./file1 -W ./file1,./dir/file2,./file3
-	./client/bin/main -D ./dir
-	./client/bin/main -r ./file1,./dir/file2,./file3
-	./client/bin/main -R -R n=2
-	./client/bin/main -d ./dir
-	./client/bin/main -t 128
-	./client/bin/main -l ./file1 -l ./file1,./dir/file2,./file3
-	./client/bin/main -u ./file1 -u ./file1,./dir/file2,./file3
-	./client/bin/main -c ./file1 -c ./file1,./dir/file2,./file3
-	./client/bin/main -p
-	./client/bin/main -L0 -L1 -L2 -L3 -L4 -L5
+	$(MAKE) test-client-args-impl TARGET=simple-run
+
+test-client-args-valgrind:
+	$(MAKE) test-client-args-impl TARGET=valgrind-test-quiet
+
+test-client-args-impl:
+	$(MAKE) -C client $(TARGET) ARGS="-f ./dir/file"
+	$(MAKE) -C client $(TARGET) ARGS="-w ./dir -w ./dir,n=32"
+	$(MAKE) -C client $(TARGET) ARGS="-W ./file1 -W ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-D ./dir"
+	$(MAKE) -C client $(TARGET) ARGS="-r ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-R -R n=2"
+	$(MAKE) -C client $(TARGET) ARGS="-d ./dir"
+	$(MAKE) -C client $(TARGET) ARGS="-t 128"
+	$(MAKE) -C client $(TARGET) ARGS="-l ./file1 -l ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-u ./file1 -u ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-c ./file1 -c ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p"
+	$(MAKE) -C client $(TARGET) ARGS="-L0 -L1 -L2 -L3 -L4"

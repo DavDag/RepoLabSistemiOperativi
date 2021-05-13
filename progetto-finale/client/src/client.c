@@ -78,11 +78,7 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
 
             // Copy value str
             int dirnameLen = (pos == NULL) ? strlen(value) : (pos - value);
-            char *dir = (char *) malloc(sizeof(char) * (dirnameLen + 1));
-            if (!dir) {
-                LOG_CRIT("Malloc error !");
-                exit(EXIT_FAILURE);
-            }
+            char *dir = (char *) mem_malloc(sizeof(char) * (dirnameLen + 1));
             dir = strncpy(dir, value, dirnameLen);
             dir[dirnameLen] = '\0';
 
@@ -106,20 +102,12 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
 
             // Parse filenames file1[,file2,file3]
             int valueLen = strlen(value), numFiles = 1;
-            char *buffer = (char *) malloc(sizeof(char) * valueLen);
+            char *buffer = (char *) mem_malloc(sizeof(char) * valueLen);
             // strcpy
-            if (!buffer) {
-                LOG_CRIT("Malloc error !");
-                exit(EXIT_FAILURE);
-            }
             for (int i = 0; i < valueLen; ++i)
                 if (value[i] == ',')
                     ++numFiles;
-            const char **files = (const char **) malloc(sizeof(char *) * numFiles);
-            if (!files) {
-                LOG_CRIT("Malloc error !");
-                exit(EXIT_FAILURE);
-            }
+            const char **files = (const char **) mem_malloc(sizeof(char *) * numFiles);
             // last element
             for (int i = 0, j = 0; i < valueLen; ++i)
                 if (value[i] == ',') {
