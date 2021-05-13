@@ -1,5 +1,3 @@
-# MAKEFLAGS += -s
-
 CC       =  gcc
 CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors
 INCLUDES = -I $(PWD)/common/include -I ./include
@@ -59,7 +57,12 @@ test-client-args:
 	$(MAKE) test-client-args-impl TARGET=simple-run
 
 test-client-args-valgrind:
+	$(MAKE) test-client-args-impl TARGET=valgrind-test
+
+test-client-args-valgrind-quiet:
 	$(MAKE) test-client-args-impl TARGET=valgrind-test-quiet
+
+IS_S_OPTION_DISABLED := $(if $(findstring s, $(MFLAGS)),, LOG)
 
 test-client-args-impl:
 	$(MAKE) -C client $(TARGET) ARGS="-f ./dir/file"

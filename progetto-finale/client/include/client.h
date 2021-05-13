@@ -54,8 +54,23 @@ typedef struct {
     };
 } CmdLineOpt_t;
 
-Result_t parse_param_option(CmdLineOpt_t *, int, const char*);
+/*
+ * Set option data based on type param 'opt' and parsing values from value.
+ */
+int parse_param_option(CmdLineOpt_t* option, int opt, char* value);
 
+/*
+ * Check if option can be executed before starting serving requests.
+ */
 int can_handle_option_before_start(CmdLineOptType_t type);
 
-Result_t handle_option(CmdLineOpt_t option);
+/*
+ * Handle an option.
+ * Requires next option to check for -r -d and -w -d.
+ */
+int handle_option(CmdLineOpt_t option, CmdLineOpt_t* nextOpt);
+
+/*
+ * Release memory allocated for options array
+ */
+void free_options(CmdLineOpt_t* options, size_t size);

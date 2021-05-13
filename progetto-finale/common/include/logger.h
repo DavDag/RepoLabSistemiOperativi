@@ -29,14 +29,14 @@ void set_log_level(int new_level);
 int get_log_level();
 
 __attribute__((unused))
-static void custom_log(FILE *stream, int loglevel, const char* file, const int line, const char *fmt, ...) {
+static void custom_log(FILE* stream, int loglevel, const char* file, const int line, const char* fmt, ...) {
     // Constants
-    static const char * const DESCR[] = { "C", "E", "W", "I", "V" };
+    static const char* const DESCR[] = { "C", "E", "W", "I", "V" };
 
 #ifndef LOG_WITHOUT_COLORS
-    static const char * const COLOR[] = { "\033[91m", "\033[31m", "\033[33m", "\033[0m", "\033[2m", "\033[0m" };
+    static const char* const COLOR[] = { "\033[91m", "\033[31m", "\033[33m", "\033[0m", "\033[2m", "\033[0m" };
 #else
-    static const char * const COLOR[] = { "", "", "", "", "", "" };
+    static const char* const COLOR[] = { "", "", "", "", "", "" };
 #endif
     
     // Filter based on loglevel
@@ -45,7 +45,7 @@ static void custom_log(FILE *stream, int loglevel, const char* file, const int l
     // Add logging infos
 #ifdef LOG_TIMESTAMP
     time_t t = time(NULL);
-    struct tm *tm = localtime(&t);
+    struct tm* tm = localtime(&t);
     fprintf(stream, "%s[%s] (%02d/%02d/%d-%02d:%02d:%02d) %s:%d > ", 
         COLOR[loglevel], DESCR[loglevel],
         tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900, tm->tm_hour, tm->tm_min, tm->tm_sec,

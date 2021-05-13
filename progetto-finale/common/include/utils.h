@@ -8,17 +8,14 @@
  * Returns -2 for range error
  * Otherwise return the value (>=0)
  */
-static inline int parse_positive_integer(const char *str) {
-    char *end = NULL;
-    errno = 0;
-    int val = strtol(str, &end, 10);
+int parse_positive_integer(const char* str);
 
-    // Check if conversion can be done
-    if (str == end || (end != NULL && *end != '\0')) return -1;
+/*
+ * Always returns a valid ptr or throw an error terminating the app
+ */
+void* mem_malloc(size_t);
 
-    // Check range error
-    if (errno == ERANGE) return -2;
-
-    // Otherwise return parsed value
-    return val;
-}
+/*
+ * Always returns a valid ptr or throw an error terminating the app
+ */
+void* mem_realloc(void*, size_t);

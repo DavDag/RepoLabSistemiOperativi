@@ -1,7 +1,8 @@
 #pragma once
 
+#define RES_OK 0
+#define RES_ERROR -1
+
 #include "utils.h"
-#include "result.h"
 #include "logger.h"
-#include "mem.h"
 #include "net.h"

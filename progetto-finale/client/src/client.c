@@ -1,7 +1,7 @@
 #include "client.h"
 #include <string.h>
 
-static const char *socket_file = DEFAULT_SOCK_FILE;
+static const char* socket_file = DEFAULT_SOCK_FILE;
 static int is_extended_log_enabled = 0;
 
 static const char* const CLIENT_USAGE =
@@ -21,9 +21,11 @@ static const char* const CLIENT_USAGE =
 "-p                 abilita le stampe sullo standard output per ogni operazione.\n"
 ;
 
-Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
+int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
     // Fill memory with zeros
     memset(option, 0, sizeof(CmdLineOpt_t));
+
+    LOG_VERB("%s", value);
 
     // Check option
     switch (opt)
@@ -58,33 +60,30 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
 
             // Check for n argument
             int val = 0;
-            const char *pos = strchr(value, ',');
+            const char* pos = strchr(value, ',');
             if (pos != NULL) {
                 // Check for ',n='
                 if (strlen(pos) < 4 || pos[1] != 'n' || pos[2] != '=') {
-                    LOG_ERRO("Error while parsing number. Correct syntax is ',n=' (ex.',n=12').");
+                    LOG_ERRO("Error while parsing number. Correct syntax is ',n=' (ex.',n=12')");
                     return RES_ERROR;
                 }
 
                 // Parse integer
                 val = parse_positive_integer(pos + 3);
                 if (val < 0) {
-                    LOG_ERRO("Error while parsing number.");
+                    LOG_ERRO("Error while parsing number");
                     return RES_ERROR;
                 }
-            } else {
-                LOG_VERB("Default value used (0) for n while parsing -w option.");
-            }
 
-            // Copy value str
-            int dirnameLen = (pos == NULL) ? strlen(value) : (pos - value);
-            char *dir = (char *) mem_malloc(sizeof(char) * (dirnameLen + 1));
-            dir = strncpy(dir, value, dirnameLen);
-            dir[dirnameLen] = '\0';
+                // Replace ',' with '\0' to obtain a zero-terminated-string out of the same buffer
+                value[(pos - value)] = '\0';
+            } else {
+                LOG_VERB("Default value used (0) for n while parsing -w option");
+            }
 
             // Set values
             option->max_files = val;
-            option->dirname = dir;
+            option->dirname = value;
             break;
         }
         
@@ -101,18 +100,14 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
             option->type = (opt == 'c') ? OPT_REMOVE_FILE_REQ : option->type;
 
             // Parse filenames file1[,file2,file3]
-            int valueLen = strlen(value), numFiles = 1;
-            char *buffer = (char *) mem_malloc(sizeof(char) * valueLen);
-            // strcpy
-            for (int i = 0; i < valueLen; ++i)
-                if (value[i] == ',')
-                    ++numFiles;
-            const char **files = (const char **) mem_malloc(sizeof(char *) * numFiles);
-            // last element
-            for (int i = 0, j = 0; i < valueLen; ++i)
+            int valueLen = strlen(value), numFiles = 1, lastFileIndex = 0;
+            for (int i = 0; i < valueLen; ++i) if (value[i] == ',') ++numFiles;       // Count files (1 + num of ',')
+            const char** files = (const char**) mem_malloc(sizeof(char*) * numFiles); // Create ptr array
+            for (int i = 0, j = 0; i < valueLen && j < numFiles; ++i)
                 if (value[i] == ',') {
-                    buffer[i] = '\0';
-                    files[j++] = &buffer[i];
+                    value[i] = '\0';                    // Replace ',' with '\0' to obtain 0-terminated-strings out of the same buffers
+                    files[j++] = &value[lastFileIndex]; // Insert ptr to the j-th string. 
+                    lastFileIndex = i + 1;
                 }
             
             // Set values
@@ -130,18 +125,18 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
             if (value != NULL) {
                 // Check for 'n='
                 if (strlen(value) < 3 || value[0] != 'n' || value[1] != '=') {
-                    LOG_ERRO("Error while parsing number. Correct syntax is 'n=' (ex.'n=12').");
+                    LOG_ERRO("Error while parsing number. Correct syntax is 'n=' (ex.'n=12')");
                     return RES_ERROR;
                 }
                 
                 // Parse integer
                 val = parse_positive_integer(value + 2);
                 if (val < 0) {
-                    LOG_ERRO("Error while parsing number.");
+                    LOG_ERRO("Error while parsing number");
                     return RES_ERROR;
                 }
             } else {
-                LOG_VERB("Default value used (0) for n while parsing -R option.");
+                LOG_VERB("Default value used (0) for n while parsing -R option");
             }
 
             // Set values
@@ -156,7 +151,7 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
             // Parse param
             int val = parse_positive_integer(value);
             if (val < 0) {
-                LOG_ERRO("Error while parsing number.");
+                LOG_ERRO("Error while parsing number");
                 return RES_ERROR;
             }
 
@@ -172,7 +167,7 @@ Result_t parse_param_option(CmdLineOpt_t *option, int opt, const char* value) {
             // Parse integer
             int val = parse_positive_integer(value);
             if (val < 0) {
-                LOG_ERRO("Error while parsing number.");
+                LOG_ERRO("Error while parsing number");
                 return RES_ERROR;
             }
 
@@ -192,13 +187,13 @@ int can_handle_option_before_start(CmdLineOptType_t type) {
     return (type == OPT_HELP_ENABLED || type ==  OPT_LOG_ENABLED || type ==  OPT_SOCKET_FILE);
 }
 
-Result_t handle_option(CmdLineOpt_t option) {
+int handle_option(CmdLineOpt_t option, CmdLineOpt_t* nextOpt) {
     switch (option.type)
     {
         case OPT_HELP_ENABLED:
         {
             printf("%s", CLIENT_USAGE);
-            LOG_VERB("Client process terminated. Usage printed.");
+            LOG_VERB("Client process terminated. Usage printed");
             exit(EXIT_SUCCESS);
             break;
         }
@@ -206,72 +201,78 @@ Result_t handle_option(CmdLineOpt_t option) {
         case OPT_SOCKET_FILE:
         {
             socket_file = option.filename;
+            LOG_VERB("Socket filename updated into: %s", option.filename);
             break;
         }
 
         case OPT_WRITE_DIR_REQ:
         {
+            LOG_VERB("Directory sent to server", option.dirname);
             break;
         }
 
         case OPT_WRITE_FILE_REQ:
         {
-            break;
-        }
 
-        case OPT_WRITE_SAVE:
-        {
+            LOG_VERB("Files sent to server");
             break;
         }
 
         case OPT_READ_FILE_REQ:
         {
+            LOG_VERB("Files read from server");
             break;
         }
 
         case OPT_READ_RAND_REQ:
         {
-            break;
-        }
-
-        case OPT_READ_SAVE:
-        {
+            LOG_VERB("Files read from server");
             break;
         }
 
         case OPT_WAIT:
         {
+            LOG_VERB("Waited %d ms", option.val);
             break;
         }
 
         case OPT_LOCK_FILE_REQ:
         {
+            LOG_VERB("Files locked");
             break;
         }
 
         case OPT_UNLOCK_FILE_REQ:
         {
+            LOG_VERB("Files unlocked");
             break;
         }
 
         case OPT_REMOVE_FILE_REQ:
         {
+            LOG_VERB("Files removed from server");
             break;
         }
 
         case OPT_LOG_ENABLED:
         {
             is_extended_log_enabled = 1;
+            LOG_VERB("Enabled per-operation logging");
             break;
         }
+
+        case OPT_READ_SAVE:
+        case OPT_WRITE_SAVE:
+            break;
 
         case OPT_CHANGE_LOG_LEVEL:
         {
             if (option.val < 0 || option.val > 4) {
-                LOG_ERRO("Log level value error. %d is not between 0 and 4.", option.val);
+                LOG_ERRO("Log level value error. %d is not between 0 and 4", option.val);
                 return RES_ERROR;
             }
             set_log_level(option.val);
+            LOG_VERB("Logging level updated into #%d", option.val);
             break;
         }
 
@@ -281,4 +282,34 @@ Result_t handle_option(CmdLineOpt_t option) {
             break;
     }
     return RES_OK;
+}
+
+void free_options(CmdLineOpt_t* options, size_t size) {
+    for (int i = 0; i < size; ++i) {
+        switch (options[i].type)
+        {
+            case OPT_HELP_ENABLED:
+            case OPT_LOG_ENABLED:
+            case OPT_SOCKET_FILE:
+            case OPT_WRITE_DIR_REQ:
+            case OPT_WRITE_SAVE:
+            case OPT_READ_RAND_REQ:
+            case OPT_READ_SAVE:
+            case OPT_WAIT:
+            case OPT_CHANGE_LOG_LEVEL:
+                break;
+            
+            case OPT_WRITE_FILE_REQ:
+            case OPT_READ_FILE_REQ:
+            case OPT_LOCK_FILE_REQ:
+            case OPT_UNLOCK_FILE_REQ:
+            case OPT_REMOVE_FILE_REQ:
+                free(options[i].files);
+                break;
+            
+            default:
+                LOG_ERRO("Unable to free option %d", options[i].type);
+                break;
+        }
+    }
 }

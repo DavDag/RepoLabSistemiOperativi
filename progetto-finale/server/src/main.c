@@ -6,7 +6,7 @@
 #include <logger.h>
 #include <common.h>
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     LOG_WARN("Hello world from server !");
     return EXIT_SUCCESS;
 }
