@@ -54,7 +54,7 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
         tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900, tm->tm_hour, tm->tm_min, tm->tm_sec,
         file, line);
 #else
-    fprintf(stream, "%s[%s] %s:%03d > ", COLOR[loglevel], DESCR[loglevel], file, line);
+    fprintf(stream, "%s[%s] %s:%d > ", COLOR[loglevel], DESCR[loglevel], file, line);
 #endif
 
     // Log data

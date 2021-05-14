@@ -7,7 +7,7 @@
  * 
  * MUST be called before any other function.
  */
-int initialize_client();
+int initializeClient();
 
 /**
  * Start parsing command line arguments.
@@ -19,7 +19,7 @@ int initialize_client();
  * 
  * Returns RES_ERROR if argv format is incorrect.
  */
-int parse_arguments(int argc, char** argv);
+int parseArguments(int argc, char** argv);
 
 /**
  * Handles options synchronously.
@@ -27,11 +27,11 @@ int parse_arguments(int argc, char** argv);
  * Error handling one option causes the function to return
  * RES_ERROR.
  */
-int handle_options();
+int handleOptions();
 
 /**
  * Release resources.
  * 
  * MUST be called after any other function.
  */
-int terminate_client();
+int terminateClient();

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include <common.h>
 #include <serverapi.h>
@@ -59,21 +60,19 @@ typedef struct {
     };
 } CmdLineOpt_t;
 
-// ======================================== DECLARATIONS: Inner functions ================================================
+// ======================================== DECLARATIONS: Inner functions ============================================
 
-int parse_param(int, int, char*);
-int has_priority(CmdLineOptType_t);
-int handle_option(int);
-int free_option(int);
+int parseParam(int, int, char*);
+int hasPriority(CmdLineOptType_t);
+int handleOption(int);
+int freeOption(int);
 
 // ======================================= DEFINITIONS: Global vars ================================================
 
 static const char* socket_file = NULL;
 static int is_extended_log_enabled = 0;
-
 static CmdLineOpt_t options[MAX_OPTIONS_COUNT];
 static int optionsSize = 0;
-
 static const char* const CLIENT_USAGE =
 "Client usage\n"
 "  -h                 stampa la lista di tutte le opzioni accettate dal client e \n"
@@ -102,18 +101,18 @@ static const char* const CLIENT_USAGE =
 
 // ======================================= DECLARATION: client.h functions ================================================
 
-int initialize_client() {
-    LOG_VERB("Initializing client state...");
+int initializeClient() {
     // Initialize global state
+    LOG_VERB("Initializing client state...");
     socket_file = DEFAULT_SOCK_FILE;
     is_extended_log_enabled = 0;
     optionsSize = 0;
     return RES_OK;
 }
 
-int parse_arguments(int argc, char** argv) {
-    LOG_VERB("Parsing arguments...");
+int parseArguments(int argc, char** argv) {
     // Start parsing arguments
+    LOG_VERB("Parsing arguments...");
     int opt = -1;
     while((opt = getopt(argc, argv, "-hpf:w:W:D:r:R::d:t:l:u:c:" "L:")) != -1) {
         // Check for max options count
@@ -124,36 +123,47 @@ int parse_arguments(int argc, char** argv) {
         }
 
         // Try parsing argument
-        if (parse_param(optionsSize, opt, optarg) != RES_OK) {
+        if (parseParam(optionsSize, opt, optarg) != RES_OK) {
             LOG_CRIT("Client process terminated while parsing arguments");
             return RES_ERROR;
         }
 
         // Handle requests that have priority
-        (has_priority(options[optionsSize].type)) ? handle_option(optionsSize) : optionsSize++;
+        (hasPriority(options[optionsSize].type)) ? handleOption(optionsSize) : optionsSize++;
     }
     return RES_OK;
 }
 
-int handle_options() {
-    LOG_VERB("Handling requests...");
+int handleOptions() {
+    // Open connection
+    const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
+    if (openConnection(socket_file, 250, abstime) != RES_OK) {
+        LOG_CRIT("Error opening connection");
+        return RES_ERROR;
+    }
     // Start handling options
+    LOG_VERB("Handling requests...");
     for (int i = 0; i < optionsSize; ++i) {
         // Try handling option
-        if (handle_option(i) != RES_OK) {
+        if (handleOption(i) != RES_OK) {
             LOG_CRIT("Client process terminated while handling arguments");
             return RES_ERROR;
         }
     }
+    // Close connection
+    if (closeConnection(socket_file) != RES_OK) {
+        LOG_CRIT("Error closing connection");
+        return RES_ERROR;
+    }
     return RES_OK;
 }
 
-int terminate_client() {
-    LOG_VERB("Terminating client state...");
+int terminateClient() {
     // Free options content
+    LOG_VERB("Terminating client state...");
     for (int i = 0; i < optionsSize; ++i) {
         // Try freeing option
-        if (free_option(i) != RES_OK) {
+        if (freeOption(i) != RES_OK) {
             LOG_ERRO("Error freeing option. Termination resumed ...");
         }
     }
@@ -162,7 +172,7 @@ int terminate_client() {
 
 // ======================================= DECLARATION: Inner functions ================================================
 
-int parse_param(int index, int opt, char* value) {
+int parseParam(int index, int opt, char* value) {
     CmdLineOpt_t* option = &options[index];
 
     // Fill memory with zeros
@@ -171,7 +181,6 @@ int parse_param(int index, int opt, char* value) {
     LOG_VERB("Option %c with args %s", opt, value);
 
     // Check option
-    int val = 0;
     switch (opt)
     {
         case 'h':
@@ -203,6 +212,7 @@ int parse_param(int index, int opt, char* value) {
             option->type = OPT_WRITE_DIR_REQ;
 
             // Check for n argument
+            int val = INT_MAX;
             const char* pos = strchr(value, ',');
             if (pos != NULL) {
                 // Check for ',n='
@@ -219,8 +229,6 @@ int parse_param(int index, int opt, char* value) {
 
                 // Replace ',' with '\0' to obtain a zero-terminated-string out of the same buffer
                 value[(pos - value)] = '\0';
-            } else {
-                LOG_VERB("Default value used (0) for n while parsing -w option");
             }
 
             // Set values
@@ -258,11 +266,14 @@ int parse_param(int index, int opt, char* value) {
             break;
         }
 
+        case 'L':
         case 't':
         {
-            option->type = OPT_WAIT;
+            option->type = (opt == 'L') ? OPT_CHANGE_LOG_LEVEL : option->type;
+            option->type = (opt == 't') ?             OPT_WAIT : option->type;
 
             // Parse param
+            int val = -1;
             if ((val = parse_positive_integer(value)) < 0) {
                 LOG_CRIT("Error while parsing number");
                 return RES_ERROR;
@@ -280,21 +291,6 @@ int parse_param(int index, int opt, char* value) {
             break;
         }
 
-        case 'L':
-        {
-            option->type = OPT_CHANGE_LOG_LEVEL;
-
-            // Parse integer
-            if ((val = parse_positive_integer(value)) < 0) {
-                LOG_CRIT("Error while parsing number");
-                return RES_ERROR;
-            }
-
-            // Set values
-            option->val = val;
-            break;
-        }
-
         case '\1':
         {
             option->type = OPT_OPTIONAL_ARG;
@@ -309,11 +305,11 @@ int parse_param(int index, int opt, char* value) {
     return RES_OK;
 }
 
-int has_priority(CmdLineOptType_t type) {
+int hasPriority(CmdLineOptType_t type) {
     return (type == OPT_HELP_ENABLED || type ==  OPT_LOG_ENABLED || type ==  OPT_SOCKET_FILE || type == OPT_OPTIONAL_ARG);
 }
 
-int handle_opt_argument(int index) {
+int handleOptArgument(int index) {
     const CmdLineOpt_t option = options[index];
 
     // Can access position without checking because its guaranteed from getopt that \ 1 always follows another option
@@ -359,7 +355,7 @@ int handle_opt_argument(int index) {
     return RES_OK;
 }
 
-int handle_option(int index) {
+int handleOption(int index) {
     const CmdLineOpt_t option = options[index];
     switch (option.type)
     {
@@ -374,19 +370,23 @@ int handle_option(int index) {
         case OPT_SOCKET_FILE:
         {
             socket_file = option.filename;
-            LOG_VERB("Socket filename updated into: %s", option.filename);
+            LOG_VERB("Socket filename updated into: \"%s\"", option.filename);
             break;
         }
 
         case OPT_WRITE_DIR_REQ:
         {
+            // TODO: use ntfw()
             LOG_VERB("Directory sent to server", option.dirname);
             break;
         }
 
         case OPT_WRITE_FILE_REQ:
         {
-
+            for (int i = 0; i < option.file_count; ++i) {
+                if (is_extended_log_enabled) LOG_INFO("Sending file \"%s\" to server", option.files[i]);
+                // TODO: send file
+            }
             LOG_VERB("Files sent to server");
             break;
         }
@@ -440,7 +440,7 @@ int handle_option(int index) {
             break;
             
         case OPT_OPTIONAL_ARG:
-            return handle_opt_argument(index);
+            return handleOptArgument(index);
 
         case OPT_CHANGE_LOG_LEVEL:
         {
@@ -460,7 +460,7 @@ int handle_option(int index) {
     return RES_OK;
 }
 
-int free_option(int index) {
+int freeOption(int index) {
     const CmdLineOpt_t option = options[index];
     switch (option.type)
     {
