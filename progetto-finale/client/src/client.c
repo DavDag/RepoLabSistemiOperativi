@@ -1,33 +1,177 @@
 #include "client.h"
-#include <string.h>
 
-static const char* socket_file = DEFAULT_SOCK_FILE;
+#define _POSIX_C_SOURCE 200112L
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <common.h>
+#include <serverapi.h>
+
+#define STATUS_GOOD 1
+#define STATUS_BAD  2
+
+// ======================================== DECLARATIONS: Types ================================================
+
+typedef enum {
+    OPT_NONE               =  0, // Default
+    
+    // Requested
+    OPT_HELP_ENABLED       =  1, // "-h" Print usage (help).
+    OPT_SOCKET_FILE        =  2, // "-f" Socket file path.
+    OPT_WRITE_DIR_REQ      =  3, // "-w" Send directory to server.
+    OPT_WRITE_FILE_REQ     =  4, // "-W" Send file/s to server.
+    OPT_WRITE_SAVE         =  5, // "-D" Where to save file/s received from server after write request.
+    OPT_READ_FILE_REQ      =  6, // "-r" Read file/s from server.
+    OPT_READ_RAND_REQ      =  7, // "-R" Read random file/s from server.
+    OPT_READ_SAVE          =  8, // "-d" Where to save file/s received from server after read request.
+    OPT_WAIT               =  9, // "-t" Time to wait between requests.
+    OPT_LOCK_FILE_REQ      = 10, // "-l" Send file/s lock request to server.
+    OPT_UNLOCK_FILE_REQ    = 11, // "-u" Send file/s unlock request to server.
+    OPT_REMOVE_FILE_REQ    = 12, // "-c" Remove file/s from server.
+    OPT_LOG_ENABLED        = 13, // "-p" Enable debug output.
+
+    // GetOpt
+    OPT_OPTIONAL_ARG       = 15, // "\1" Sended by getopt when parsing optional parameter
+
+    // Custom
+    OPT_CHANGE_LOG_LEVEL   = 20, // "-L" Change log level from here on
+
+} CmdLineOptType_t;
+
+typedef struct {
+    CmdLineOptType_t type;
+    union {
+        // void;                  // -h, -p
+        const char* filename;     // -f
+        const char* save_dirname; // -D, -d
+        struct {                  // -w
+            int max_files;
+            const char* dirname;
+        };
+        struct {                  // -W, -r, -l, -u, -c
+            int file_count;
+            const char** files;
+        };
+        int val;                  // -R, -t, -L
+        const char* content;      // optional arguments (sent by getopt with opt '\1')
+    };
+} CmdLineOpt_t;
+
+// ======================================== DECLARATIONS: Inner functions ================================================
+
+int parse_param(int, int, char*);
+int has_priority(CmdLineOptType_t);
+int handle_option(int);
+int free_option(int);
+
+// ======================================= DEFINITIONS: Global vars ================================================
+
+static const char* socket_file = NULL;
 static int is_extended_log_enabled = 0;
+
+static CmdLineOpt_t options[MAX_OPTIONS_COUNT];
+static int optionsSize = 0;
 
 static const char* const CLIENT_USAGE =
 "Client usage\n"
-"-h                 stampa la lista di tutte le opzioni accettate dal client e termina immediatamente.\n"
-"-f filename        specifica il nome del socket AF_UNIX a cui connettersi.\n"
-"-w dirname[,n=0]   invia al server i file nella cartella 'dirname' ricorsivamente (al massimo n file).\n"
-"-W file1[,file2    lista di nomi di file da scrivere nel server separati da ','.\n"
-"-D dirname         cartella in memoria secondaria dove vengono scritti (lato client) i file che il server rimuove a seguito di capacity misses.\n"
-"-r file1[,file2]   lista di nomi di file da leggere dal server separati da ','.\n"
-"-R [n=0]           tale opzione permette di leggere 'n' file qualsiasi attualmente memorizzati nel server; se n=0 vengono letti tutti i file nel server.\n"
-"-d dirname         cartella in memoria secondaria dove scrivere i file letti dal server con l'opzione '-r' o '-R'.\n"
-"-t time            tempo in millisecondi che intercorre tra l'invio di due richieste successive al server.\n"
-"-l file1[,file2]   lista di nomi di file su cui acquisire la mutua esclusione.\n"
-"-u file1[,file2]   lista di nomi di file su cui rilasciare la mutua esclusione.\n"
-"-c file1[,file2]   lista di file da rimuovere dal server se presenti.\n"
-"-p                 abilita le stampe sullo standard output per ogni operazione.\n"
+"  -h                 stampa la lista di tutte le opzioni accettate dal client e \n"
+"                     termina immediatamente.\n\n"
+"  -p                 abilita le stampe sullo standard output per ogni operazione.\n"
+"  -f filename        specifica il nome del socket AF_UNIX a cui connettersi.\n"
+"  -t time            tempo in millisecondi che intercorre tra l'invio di due richieste\n"
+"                     successive al server.\n\n"
+"  -w dirname[,n=0]   invia al server i file nella cartella 'dirname' ricorsivamente\n"
+"                     (al massimo n file).\n"
+"  -W file1[,file2    lista di nomi di file da scrivere nel server separati da ','.\n"
+"  -D dirname         cartella in memoria secondaria dove vengono scritti (lato client)\n"
+"                     i file che il server restituisce con l'opzione '-w' o '-W'.\n"
+"                     Il server ritorna i file quando, in seguito ad una richiesta di\n"
+"                     scrittura, viene rimpiazzato un file (capacity misses).\n\n"
+"  -r file1[,file2]   lista di nomi di file da leggere dal server separati da ','.\n"
+"  -R [n=0]           tale opzione permette di leggere 'n' file qualsiasi attualmente\n"
+"                     memorizzati nel server; se n=0 vengono letti tutti i file nel\n"
+"                     server.\n"
+"  -d dirname         cartella in memoria secondaria dove scrivere i file letti dal\n"
+"                     server con l'opzione '-r' o '-R'.\n\n"
+"  -l file1[,file2]   lista di nomi di file su cui acquisire la mutua esclusione.\n"
+"  -u file1[,file2]   lista di nomi di file su cui rilasciare la mutua esclusione.\n"
+"  -c file1[,file2]   lista di file da rimuovere dal server se presenti.\n\n"
 ;
 
-int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
+// ======================================= DECLARATION: client.h functions ================================================
+
+int initialize_client() {
+    LOG_VERB("Initializing client state...");
+    // Initialize global state
+    socket_file = DEFAULT_SOCK_FILE;
+    is_extended_log_enabled = 0;
+    optionsSize = 0;
+    return RES_OK;
+}
+
+int parse_arguments(int argc, char** argv) {
+    LOG_VERB("Parsing arguments...");
+    // Start parsing arguments
+    int opt = -1;
+    while((opt = getopt(argc, argv, "-hpf:w:W:D:r:R::d:t:l:u:c:" "L:")) != -1) {
+        // Check for max options count
+        if (optionsSize == MAX_OPTIONS_COUNT) {
+            // In case it reaches maximum options, it returns RES_OK to continue execution
+            LOG_WARN("Max options count too low. Maximum reached: %d", optionsSize);
+            return RES_OK;
+        }
+
+        // Try parsing argument
+        if (parse_param(optionsSize, opt, optarg) != RES_OK) {
+            LOG_CRIT("Client process terminated while parsing arguments");
+            return RES_ERROR;
+        }
+
+        // Handle requests that have priority
+        (has_priority(options[optionsSize].type)) ? handle_option(optionsSize) : optionsSize++;
+    }
+    return RES_OK;
+}
+
+int handle_options() {
+    LOG_VERB("Handling requests...");
+    // Start handling options
+    for (int i = 0; i < optionsSize; ++i) {
+        // Try handling option
+        if (handle_option(i) != RES_OK) {
+            LOG_CRIT("Client process terminated while handling arguments");
+            return RES_ERROR;
+        }
+    }
+    return RES_OK;
+}
+
+int terminate_client() {
+    LOG_VERB("Terminating client state...");
+    // Free options content
+    for (int i = 0; i < optionsSize; ++i) {
+        // Try freeing option
+        if (free_option(i) != RES_OK) {
+            LOG_ERRO("Error freeing option. Termination resumed ...");
+        }
+    }
+    return RES_OK;
+}
+
+// ======================================= DECLARATION: Inner functions ================================================
+
+int parse_param(int index, int opt, char* value) {
+    CmdLineOpt_t* option = &options[index];
+
     // Fill memory with zeros
     memset(option, 0, sizeof(CmdLineOpt_t));
 
-    LOG_VERB("%s", value);
+    LOG_VERB("Option %c with args %s", opt, value);
 
     // Check option
+    int val = 0;
     switch (opt)
     {
         case 'h':
@@ -59,19 +203,17 @@ int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
             option->type = OPT_WRITE_DIR_REQ;
 
             // Check for n argument
-            int val = 0;
             const char* pos = strchr(value, ',');
             if (pos != NULL) {
                 // Check for ',n='
                 if (strlen(pos) < 4 || pos[1] != 'n' || pos[2] != '=') {
-                    LOG_ERRO("Error while parsing number. Correct syntax is ',n=' (ex.',n=12')");
+                    LOG_CRIT("Error while parsing number. Correct syntax is ',n=' (ex.',n=12')");
                     return RES_ERROR;
                 }
 
                 // Parse integer
-                val = parse_positive_integer(pos + 3);
-                if (val < 0) {
-                    LOG_ERRO("Error while parsing number");
+                if ((val = parse_positive_integer(pos + 3)) < 0) {
+                    LOG_CRIT("Error while parsing number");
                     return RES_ERROR;
                 }
 
@@ -115,28 +257,15 @@ int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
             option->files = files;
             break;
         }
-        
-        case 'R':
-        {
-            option->type = OPT_READ_RAND_REQ;
 
-            // Check for n argument
-            int val = 0;
-            if (value != NULL) {
-                // Check for 'n='
-                if (strlen(value) < 3 || value[0] != 'n' || value[1] != '=') {
-                    LOG_ERRO("Error while parsing number. Correct syntax is 'n=' (ex.'n=12')");
-                    return RES_ERROR;
-                }
-                
-                // Parse integer
-                val = parse_positive_integer(value + 2);
-                if (val < 0) {
-                    LOG_ERRO("Error while parsing number");
-                    return RES_ERROR;
-                }
-            } else {
-                LOG_VERB("Default value used (0) for n while parsing -R option");
+        case 't':
+        {
+            option->type = OPT_WAIT;
+
+            // Parse param
+            if ((val = parse_positive_integer(value)) < 0) {
+                LOG_CRIT("Error while parsing number");
+                return RES_ERROR;
             }
 
             // Set values
@@ -144,19 +273,10 @@ int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
             break;
         }
 
-        case 't':
+        case 'R':
         {
-            option->type = OPT_WAIT;
-
-            // Parse param
-            int val = parse_positive_integer(value);
-            if (val < 0) {
-                LOG_ERRO("Error while parsing number");
-                return RES_ERROR;
-            }
-
-            // Set values
-            option->val = val;
+            option->type = OPT_READ_RAND_REQ;
+            option->val = 0; // Default value for -R without 'n' argument
             break;
         }
 
@@ -165,9 +285,8 @@ int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
             option->type = OPT_CHANGE_LOG_LEVEL;
 
             // Parse integer
-            int val = parse_positive_integer(value);
-            if (val < 0) {
-                LOG_ERRO("Error while parsing number");
+            if ((val = parse_positive_integer(value)) < 0) {
+                LOG_CRIT("Error while parsing number");
                 return RES_ERROR;
             }
 
@@ -175,24 +294,78 @@ int parse_param_option(CmdLineOpt_t* option, int opt, char* value) {
             option->val = val;
             break;
         }
-        
+
+        case '\1':
+        {
+            option->type = OPT_OPTIONAL_ARG;
+            option->content = value;
+            break;
+        }
+
         default:
-            LOG_ERRO("Unable to parse option %c", opt);
+            LOG_CRIT("Unable to parse option %c", opt);
             return RES_ERROR;
     }
     return RES_OK;
 }
 
-int can_handle_option_before_start(CmdLineOptType_t type) {
-    return (type == OPT_HELP_ENABLED || type ==  OPT_LOG_ENABLED || type ==  OPT_SOCKET_FILE);
+int has_priority(CmdLineOptType_t type) {
+    return (type == OPT_HELP_ENABLED || type ==  OPT_LOG_ENABLED || type ==  OPT_SOCKET_FILE || type == OPT_OPTIONAL_ARG);
 }
 
-int handle_option(CmdLineOpt_t option, CmdLineOpt_t* nextOpt) {
+int handle_opt_argument(int index) {
+    const CmdLineOpt_t option = options[index];
+
+    // Can access position without checking because its guaranteed from getopt that \ 1 always follows another option
+    CmdLineOpt_t lastOption = options[index - 1];
+
+    // Check type of lastOption
+    int val = 0;
+    switch (lastOption.type)
+    {
+        case OPT_READ_RAND_REQ:
+        {
+            // Check for n argument
+            if (option.content != NULL) {
+                // Check for 'n='
+                if (strlen(option.content) < 3 || option.content[0] != 'n' || option.content[1] != '=') {
+                    LOG_CRIT("Error while parsing number. Correct syntax is 'n=' (ex.'n=12')");
+                    return RES_ERROR;
+                }
+                
+                // Parse integer
+                if ((val = parse_positive_integer(option.content + 2)) < 0) {
+                    LOG_CRIT("Error while parsing number");
+                    return RES_ERROR;
+                }
+                
+                // Set values
+                lastOption.val = val;
+            } else {
+                // Should never happen
+                LOG_CRIT("Empty optional argument");
+                return RES_ERROR;
+            }
+            break;
+        }
+        
+        default:
+            // Should never happen
+            LOG_CRIT("Optional argument found without option before that handles it");
+            return RES_ERROR;
+    }
+
+    LOG_VERB("Handled optional argument %s", option.content);
+    return RES_OK;
+}
+
+int handle_option(int index) {
+    const CmdLineOpt_t option = options[index];
     switch (option.type)
     {
         case OPT_HELP_ENABLED:
         {
-            printf("%s", CLIENT_USAGE);
+            LOG_EMPTY("%s", CLIENT_USAGE);
             LOG_VERB("Client process terminated. Usage printed");
             exit(EXIT_SUCCESS);
             break;
@@ -263,12 +436,16 @@ int handle_option(CmdLineOpt_t option, CmdLineOpt_t* nextOpt) {
 
         case OPT_READ_SAVE:
         case OPT_WRITE_SAVE:
+            // Nothings to do
             break;
+            
+        case OPT_OPTIONAL_ARG:
+            return handle_opt_argument(index);
 
         case OPT_CHANGE_LOG_LEVEL:
         {
             if (option.val < 0 || option.val > 4) {
-                LOG_ERRO("Log level value error. %d is not between 0 and 4", option.val);
+                LOG_CRIT("Log level value error. %d is not between 0 and 4", option.val);
                 return RES_ERROR;
             }
             set_log_level(option.val);
@@ -277,39 +454,39 @@ int handle_option(CmdLineOpt_t option, CmdLineOpt_t* nextOpt) {
         }
 
         default:
-            LOG_ERRO("Unable to handle option %d", option.type);
+            LOG_CRIT("Unable to handle option %d", option.type);
             return RES_ERROR;
-            break;
     }
     return RES_OK;
 }
 
-void free_options(CmdLineOpt_t* options, size_t size) {
-    for (int i = 0; i < size; ++i) {
-        switch (options[i].type)
-        {
-            case OPT_HELP_ENABLED:
-            case OPT_LOG_ENABLED:
-            case OPT_SOCKET_FILE:
-            case OPT_WRITE_DIR_REQ:
-            case OPT_WRITE_SAVE:
-            case OPT_READ_RAND_REQ:
-            case OPT_READ_SAVE:
-            case OPT_WAIT:
-            case OPT_CHANGE_LOG_LEVEL:
-                break;
-            
-            case OPT_WRITE_FILE_REQ:
-            case OPT_READ_FILE_REQ:
-            case OPT_LOCK_FILE_REQ:
-            case OPT_UNLOCK_FILE_REQ:
-            case OPT_REMOVE_FILE_REQ:
-                free(options[i].files);
-                break;
-            
-            default:
-                LOG_ERRO("Unable to free option %d", options[i].type);
-                break;
-        }
+int free_option(int index) {
+    const CmdLineOpt_t option = options[index];
+    switch (option.type)
+    {
+        case OPT_HELP_ENABLED:
+        case OPT_LOG_ENABLED:
+        case OPT_SOCKET_FILE:
+        case OPT_WRITE_DIR_REQ:
+        case OPT_WRITE_SAVE:
+        case OPT_READ_RAND_REQ:
+        case OPT_READ_SAVE:
+        case OPT_WAIT:
+        case OPT_OPTIONAL_ARG:
+        case OPT_CHANGE_LOG_LEVEL:
+            break;
+        
+        case OPT_WRITE_FILE_REQ:
+        case OPT_READ_FILE_REQ:
+        case OPT_LOCK_FILE_REQ:
+        case OPT_UNLOCK_FILE_REQ:
+        case OPT_REMOVE_FILE_REQ:
+            free(option.files);
+            break;
+        
+        default:
+            LOG_ERRO("Unable to free option %d", option.type);
+            return RES_ERROR;
     }
+    return RES_OK;
 }

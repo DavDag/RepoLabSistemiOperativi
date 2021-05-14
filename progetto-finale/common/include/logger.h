@@ -13,11 +13,11 @@
 #define LOG_LEVEL_INFO     3
 #define LOG_LEVEL_VERBOSE  4
 
-#define LOG_CRIT_INTO_STREAM(stream, ...) custom_log(stream, LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_ERRO_INTO_STREAM(stream, ...) custom_log(stream,    LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_WARN_INTO_STREAM(stream, ...) custom_log(stream,  LOG_LEVEL_WARNING, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_INFO_INTO_STREAM(stream, ...) custom_log(stream,     LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__)
-#define LOG_VERB_INTO_STREAM(stream, ...) custom_log(stream,  LOG_LEVEL_VERBOSE, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_CRIT_INTO_STREAM(stream, ...) custom_formatted_log(stream, LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERRO_INTO_STREAM(stream, ...) custom_formatted_log(stream,    LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WARN_INTO_STREAM(stream, ...) custom_formatted_log(stream,  LOG_LEVEL_WARNING, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_INFO_INTO_STREAM(stream, ...) custom_formatted_log(stream,     LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_VERB_INTO_STREAM(stream, ...) custom_formatted_log(stream,  LOG_LEVEL_VERBOSE, __FILE__, __LINE__, __VA_ARGS__)
 
 #define LOG_CRIT(...) LOG_CRIT_INTO_STREAM(stderr, __VA_ARGS__)
 #define LOG_ERRO(...) LOG_ERRO_INTO_STREAM(stderr, __VA_ARGS__)
@@ -25,11 +25,14 @@
 #define LOG_INFO(...) LOG_INFO_INTO_STREAM(stdout, __VA_ARGS__)
 #define LOG_VERB(...) LOG_VERB_INTO_STREAM(stdout, __VA_ARGS__)
 
+#define LOG_EMPTY_INTO_STREAM(stream, ...) fprintf(stream, __VA_ARGS__)
+#define LOG_EMPTY(...) LOG_EMPTY_INTO_STREAM(stdout, __VA_ARGS__)
+
 void set_log_level(int new_level);
 int get_log_level();
 
 __attribute__((unused))
-static void custom_log(FILE* stream, int loglevel, const char* file, const int line, const char* fmt, ...) {
+static void custom_formatted_log(FILE* stream, int loglevel, const char* file, const int line, const char* fmt, ...) {
     // Constants
     static const char* const DESCR[] = { "C", "E", "W", "I", "V" };
 
@@ -51,7 +54,7 @@ static void custom_log(FILE* stream, int loglevel, const char* file, const int l
         tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900, tm->tm_hour, tm->tm_min, tm->tm_sec,
         file, line);
 #else
-    fprintf(stream, "%s[%s] %s:%d > ", COLOR[loglevel], DESCR[loglevel], file, line);
+    fprintf(stream, "%s[%s] %s:%03d > ", COLOR[loglevel], DESCR[loglevel], file, line);
 #endif
 
     // Log data
