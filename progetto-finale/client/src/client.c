@@ -15,9 +15,6 @@
 #include <common.h>
 #include <serverapi.h>
 
-#define SERVER_API_OK     0 // Syntactic sugar
-#define SERVER_API_ERROR -1 // Syntactic sugar
-
 // ======================================== DECLARATIONS: Types ================================================
 
 typedef enum {
@@ -377,10 +374,12 @@ int handleOption(int index) {
         case OPT_SOCKET_FILE:
         {
             socket_file = option.filename;
-            LOG_VERB("Socket filename updated into: \"%s\"", option.filename);
 
-            // Log if '-p' is enabled
-            if (is_extended_log_enabled) LOG_INFO("{-f} Socket file changed into '%s'", option.filename);
+            // Log operation data
+            if (is_extended_log_enabled)
+                LOG_INFO("{-f} Socket file changed into '%s'", option.filename);
+
+            LOG_VERB("Socket filename updated");
             break;
         }
 
@@ -390,16 +389,16 @@ int handleOption(int index) {
             LOG_INFO("Enabled per-operation logging");
             break;
         }
-
-        case OPT_READ_SAVE:
-        case OPT_WRITE_SAVE:
-            // Nothings to do
-            break;
         
         case OPT_WAIT:
         {
             usleep(option.val);
-            LOG_VERB("Waited %d ms", option.val);
+            
+            // Log operation data
+            if (is_extended_log_enabled)
+                LOG_INFO("{-t} Waited %dms", option.val);
+
+            LOG_VERB("Process resumed");
             break;
         }
             
@@ -419,7 +418,23 @@ int handleOption(int index) {
 
         case OPT_READ_RAND_REQ:
         {
-            // TODO: Random read files
+            int status = SERVER_API_SUCCESS;
+            char* dirname = NULL;
+
+            // Check if next option is '-d'
+            if ((index < optionsSize - 1) && (options[index + 1].type == OPT_READ_SAVE))
+                dirname = options[index + 1].save_dirname;
+            
+            // Try read N files from server
+            if ((status = readNFiles(option.val, dirname)) == SERVER_API_FAILURE) {
+                LOG_ERRNO("Error reading files from server");
+            }
+
+            // Log operation data
+            if (is_extended_log_enabled)
+                LOG_INFO("{-R} numFiles: %d, dirname: '%s' > %s ! Bytes wrote %llu",
+                    option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
+
             LOG_VERB("Files read from server");
             break;
         }
@@ -461,32 +476,33 @@ int handleOption(int index) {
             char* dirname = NULL;
 
             // Check if next option is '-D'
-            if (index < optionsSize && options[index + 1].type == OPT_WRITE_SAVE)
+            if ((index < optionsSize - 1) && (options[index + 1].type == OPT_WRITE_SAVE))
                 dirname = options[index + 1].save_dirname;
 
             // Start sending files
             for (int i = 0; i < option.file_count; ++i) {
-                int status = SERVER_API_OK;
+                int status = SERVER_API_SUCCESS;
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_CREATE | O_LOCK)) == SERVER_API_OK) {
+                if ((status = openFile(pathname, O_CREATE | O_LOCK)) == SERVER_API_SUCCESS) {
                     // [2]
-                    if ((status = writeFile(pathname, dirname)) == SERVER_API_ERROR)
+                    if ((status = writeFile(pathname, dirname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error writing file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_ERROR) {
+                    if (closeFile(pathname) == SERVER_API_FAILURE) {
                         LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_ERROR;
+                        status = SERVER_API_FAILURE;
                     }
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
                 // [4]
+                // Log operation data
                 if (is_extended_log_enabled)
                     LOG_INFO("{-W} file: '%s', dirname: '%s' > %s ! Bytes wrote %llu",
-                        pathname, dirname, (status == SERVER_API_OK) ? "SUCCEDED" : "FAILED", 0L);
+                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
             }
             break;
         }
@@ -496,34 +512,35 @@ int handleOption(int index) {
             char* dirname = NULL;
 
             // Check if next option is '-d'
-            if (index < optionsSize && options[index + 1].type == OPT_READ_SAVE)
+            if ((index < optionsSize - 1) && (options[index + 1].type == OPT_READ_SAVE))
                 dirname = options[index + 1].save_dirname;
 
             // Start requesting files
             for (int i = 0; i < option.file_count; ++i) {
-                int status = SERVER_API_OK;
+                int status = SERVER_API_SUCCESS;
                 char* pathname = option.files[i];
                 void* buff = NULL;
                 size_t buffSize = 0L;
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_OK) {
+                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
-                    if ((status = readFile(pathname, &buff, &buffSize)) == SERVER_API_ERROR)
+                    if ((status = readFile(pathname, &buff, &buffSize)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error reading file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_ERROR) {
+                    if (closeFile(pathname) == SERVER_API_FAILURE) {
                         LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_ERROR;
+                        status = SERVER_API_FAILURE;
                     }
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
                 // [4]
+                // Log operation data
                 if (is_extended_log_enabled)
                     LOG_INFO("{-r} file: '%s', dirname: '%s' > %s ! Bytes read %llu",
-                        pathname, dirname, (status == SERVER_API_OK) ? "SUCCEDED" : "FAILED", 0L);
+                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
             }
             LOG_VERB("Files read from server");
             break;
@@ -533,26 +550,27 @@ int handleOption(int index) {
         {
             // Start locking files
             for (int i = 0; i < option.file_count; ++i) {
-                int status = SERVER_API_OK;
+                int status = SERVER_API_SUCCESS;
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_OK) {
+                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
-                    if ((status = lockFile(pathname)) == SERVER_API_ERROR)
+                    if ((status = lockFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error locking file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_ERROR) {
+                    if (closeFile(pathname) == SERVER_API_FAILURE) {
                         LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_ERROR;
+                        status = SERVER_API_FAILURE;
                     }
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
                 // [4]
+                // Log operation data
                 if (is_extended_log_enabled)
-                    LOG_INFO("{-l} file: '%s' > %s !", pathname, (status == SERVER_API_OK) ? "SUCCEDED" : "FAILED");
+                    LOG_INFO("{-l} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files locked");
             break;
@@ -562,26 +580,27 @@ int handleOption(int index) {
         {
             // Start unlocking files
             for (int i = 0; i < option.file_count; ++i) {
-                int status = SERVER_API_OK;
+                int status = SERVER_API_SUCCESS;
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_OK) {
+                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
-                    if ((status = unlockFile(pathname)) == SERVER_API_ERROR)
+                    if ((status = unlockFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error locking file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_ERROR) {
+                    if (closeFile(pathname) == SERVER_API_FAILURE) {
                         LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_ERROR;
+                        status = SERVER_API_FAILURE;
                     }
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
                 // [4]
+                // Log operation data
                 if (is_extended_log_enabled)
-                    LOG_INFO("{-u} file: '%s' > %s !", pathname, (status == SERVER_API_OK) ? "SUCCEDED" : "FAILED");
+                    LOG_INFO("{-u} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files unlocked");
             break;
@@ -591,26 +610,27 @@ int handleOption(int index) {
         {
             // Start removing files
             for (int i = 0; i < option.file_count; ++i) {
-                int status = SERVER_API_OK;
+                int status = SERVER_API_SUCCESS;
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_LOCK)) == SERVER_API_OK) {
+                if ((status = openFile(pathname, O_LOCK)) == SERVER_API_SUCCESS) {
                     // [2]
-                    if ((status = removeFile(pathname)) == SERVER_API_ERROR)
+                    if ((status = removeFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error removing file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_ERROR) {
+                    if (closeFile(pathname) == SERVER_API_FAILURE) {
                         LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_ERROR;
+                        status = SERVER_API_FAILURE;
                     }
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
                 // [4]
+                // Log operation data
                 if (is_extended_log_enabled)
-                    LOG_INFO("{-c} file: '%s' > %s !", pathname, (status == SERVER_API_OK) ? "SUCCEDED" : "FAILED");
+                    LOG_INFO("{-c} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files removed from server");
             break;
@@ -619,9 +639,15 @@ int handleOption(int index) {
         case OPT_WRITE_DIR_REQ:
         {
             // TODO: use ntfw()
+            // TODO: Log operation data
             LOG_VERB("Directory sent to server", option.dirname);
             break;
         }
+
+        case OPT_READ_SAVE:
+        case OPT_WRITE_SAVE:
+            // Nothings to do
+            break;
 
         default:
             LOG_CRIT("Unable to handle option %d", option.type);
