@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define O_EMPTY  0x00 // openFile default flag
+#define O_CREATE 0x01 // openFile flag to create file
+#define O_LOCK   0x02 // openFile flag to lock file during creation
+
 /**
  * Viene aperta una connessione AF_UNIX al socket file sockname. Se il
  * server non accetta immediatamente la richiesta di connessione, la
