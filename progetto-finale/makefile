@@ -63,11 +63,11 @@ test-client-valgrind-quiet:
 	$(MAKE) test-client-impl TARGET=valgrind-test-quiet
 
 test-client-impl:
-	$(MAKE) -C client $(TARGET) ARGS="-f ./dir/socket -w ./dir -w ./dir,n=32"
-	$(MAKE) -C client $(TARGET) ARGS="-W ./file1 -W ./file1,./dir/file2,./file3 -D ./dir"
-	$(MAKE) -C client $(TARGET) ARGS="-r ./file1 -t 128 -r./dir/file2,./file3"
-	$(MAKE) -C client $(TARGET) ARGS="-R -R n=2 -d ./dir"
-	$(MAKE) -C client $(TARGET) ARGS="-l ./file1 -l ./file1,./dir/file2,./file3"
-	$(MAKE) -C client $(TARGET) ARGS="-u ./file1 -u ./file1,./dir/file2,./file3"
-	$(MAKE) -C client $(TARGET) ARGS="-c ./file1 -c ./file1,./dir/file2,./file3"
-	$(MAKE) -C client $(TARGET) ARGS="-L0 -L1 -L2 -L3 -L4"
+	$(MAKE) -C client $(TARGET) ARGS="-p -f ./dir/socket -w ./dir -w ./dir,n=32"
+	$(MAKE) -C client $(TARGET) ARGS="-p -W ./file1 -W ./file1,./dir/file2,./file3 -D ./dir"
+	$(MAKE) -C client $(TARGET) ARGS="-p -r ./file1 -t 128 -r./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p -R -R n=2 -d ./dir"
+	$(MAKE) -C client $(TARGET) ARGS="-p -l ./file1 -l ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p -u ./file1 -u ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p -c ./file1 -c ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p -L0 -L1 -L2 -L3 -L4"

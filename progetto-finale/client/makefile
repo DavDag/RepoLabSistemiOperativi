@@ -12,10 +12,10 @@ simple-run:
 	$(EXE) $(ARGS)
 
 valgrind-test:
-	valgrind --leak-check=full $(EXE) $(ARGS)
+	valgrind --leak-check=full --track-origins=yes $(EXE) $(ARGS)
 
 valgrind-test-quiet:
-	valgrind --leak-check=full --quiet $(EXE) $(ARGS)
+	valgrind --leak-check=full  --track-origins=yes --quiet $(EXE) $(ARGS)
 
 clean: $(BINARIES_DIR)
 	rm -rf $(BINARIES_DIR) $(OBJECTS_DIR)

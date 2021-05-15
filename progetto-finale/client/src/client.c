@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <signal.h>
 
 #include <common.h>
 #include <serverapi.h>
@@ -44,19 +45,19 @@ typedef enum {
 typedef struct {
     CmdLineOptType_t type;
     union {
-        // void;                  // -h, -p
-        const char* filename;     // -f
-        const char* save_dirname; // -D, -d
-        struct {                  // -w
+        // void;            // -h, -p
+        char* filename;     // -f
+        char* save_dirname; // -D, -d
+        struct {            // -w
             int max_files;
-            const char* dirname;
+            char* dirname;
         };
-        struct {                  // -W, -r, -l, -u, -c
+        struct {            // -W, -r, -l, -u, -c
             int file_count;
-            const char** files;
+            char** files;
         };
-        int val;                  // -R, -t, -L
-        const char* content;      // optional arguments (sent by getopt with opt '\1')
+        int val;            // -R, -t, -L
+        char* content;      // optional arguments (sent by getopt with opt '\1')
     };
 } CmdLineOpt_t;
 
@@ -66,6 +67,7 @@ int parseParam(int, int, char*);
 int hasPriority(CmdLineOptType_t);
 int handleOption(int);
 int freeOption(int);
+void handleSignal(int);
 
 // ======================================= DEFINITIONS: Global vars ================================================
 
@@ -107,6 +109,10 @@ int initializeClient() {
     socket_file = DEFAULT_SOCK_FILE;
     is_extended_log_enabled = 0;
     optionsSize = 0;
+    LOG_VERB("Registering signals...");
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = handleSignal;
     return RES_OK;
 }
 
@@ -251,14 +257,15 @@ int parseParam(int index, int opt, char* value) {
 
             // Parse filenames file1[,file2,file3]
             int valueLen = strlen(value), numFiles = 1, lastFileIndex = 0;
-            for (int i = 0; i < valueLen; ++i) if (value[i] == ',') ++numFiles;       // Count files (1 + num of ',')
-            const char** files = (const char**) mem_malloc(sizeof(char*) * numFiles); // Create ptr array
+            for (int i = 0; i < valueLen; ++i) if (value[i] == ',') ++numFiles; // Count files (1 + num of ',')
+            char** files = mem_malloc(sizeof(char*) * numFiles);                // Create ptr array
             for (int i = 0, j = 0; i < valueLen && j < numFiles; ++i)
                 if (value[i] == ',') {
                     value[i] = '\0';                    // Replace ',' with '\0' to obtain 0-terminated-strings out of the same buffers
                     files[j++] = &value[lastFileIndex]; // Insert ptr to the j-th string. 
                     lastFileIndex = i + 1;
                 }
+            files[numFiles - 1] = &value[lastFileIndex];
             
             // Set values
             option->file_count = numFiles;
@@ -363,6 +370,7 @@ int handleOption(int index) {
         {
             LOG_EMPTY("%s", CLIENT_USAGE);
             LOG_VERB("Client process terminated. Usage printed");
+            terminateClient();
             exit(EXIT_SUCCESS);
             break;
         }
@@ -371,6 +379,13 @@ int handleOption(int index) {
         {
             socket_file = option.filename;
             LOG_VERB("Socket filename updated into: \"%s\"", option.filename);
+            break;
+        }
+
+        case OPT_LOG_ENABLED:
+        {
+            is_extended_log_enabled = 1;
+            LOG_INFO("Enabled per-operation logging");
             break;
         }
 
@@ -385,7 +400,7 @@ int handleOption(int index) {
         {
             for (int i = 0; i < option.file_count; ++i) {
                 if (is_extended_log_enabled) LOG_INFO("Sending file \"%s\" to server", option.files[i]);
-                // TODO: send file
+                // TODO: Send file
             }
             LOG_VERB("Files sent to server");
             break;
@@ -393,12 +408,17 @@ int handleOption(int index) {
 
         case OPT_READ_FILE_REQ:
         {
+            for (int i = 0; i < option.file_count; ++i) {
+                if (is_extended_log_enabled) LOG_INFO("Reading file \"%s\" from server", option.files[i]);
+                // TODO: Read file
+            }
             LOG_VERB("Files read from server");
             break;
         }
 
         case OPT_READ_RAND_REQ:
         {
+            // TODO: Random read files
             LOG_VERB("Files read from server");
             break;
         }
@@ -411,26 +431,31 @@ int handleOption(int index) {
 
         case OPT_LOCK_FILE_REQ:
         {
+            for (int i = 0; i < option.file_count; ++i) {
+                if (is_extended_log_enabled) LOG_INFO("Locking file \"%s\" from server", option.files[i]);
+                // TODO: Lock file
+            }
             LOG_VERB("Files locked");
             break;
         }
 
         case OPT_UNLOCK_FILE_REQ:
         {
+            for (int i = 0; i < option.file_count; ++i) {
+                if (is_extended_log_enabled) LOG_INFO("Unlocking file \"%s\" from server", option.files[i]);
+                // TODO: Unlock file
+            }
             LOG_VERB("Files unlocked");
             break;
         }
 
         case OPT_REMOVE_FILE_REQ:
         {
+            for (int i = 0; i < option.file_count; ++i) {
+                if (is_extended_log_enabled) LOG_INFO("Removing file \"%s\" from server", option.files[i]);
+                // TODO: Remove file
+            }
             LOG_VERB("Files removed from server");
-            break;
-        }
-
-        case OPT_LOG_ENABLED:
-        {
-            is_extended_log_enabled = 1;
-            LOG_VERB("Enabled per-operation logging");
             break;
         }
 
@@ -489,4 +514,8 @@ int freeOption(int index) {
             return RES_ERROR;
     }
     return RES_OK;
+}
+
+void handleSignal(int signal) {
+
 }
