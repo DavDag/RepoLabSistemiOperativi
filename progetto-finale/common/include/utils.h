@@ -18,4 +18,9 @@ void* mem_malloc(size_t);
 /*
  * Always returns a valid ptr or throw an error terminating the app
  */
+void* mem_calloc(size_t, size_t);
+
+/*
+ * Always returns a valid ptr or throw an error terminating the app
+ */
 void* mem_realloc(void*, size_t);

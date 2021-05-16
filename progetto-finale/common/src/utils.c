@@ -29,6 +29,19 @@ void* mem_malloc(size_t size) {
     return ptr;
 }
 
+void* mem_calloc(size_t num, size_t size) {
+    void* ptr = calloc(num, size);
+
+    // Check for error
+    if (ptr == NULL) {
+        LOG_CRIT("Calloc failed trying to allocate %ul bytes", num * size);
+        exit(EXIT_FAILURE);
+    }
+
+    // Otherwise returns ptr
+    return ptr;
+}
+
 void* mem_realloc(void* ptr, size_t size) {
     void* newptr = realloc(ptr, size);
     

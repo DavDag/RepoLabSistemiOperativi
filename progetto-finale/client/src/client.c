@@ -101,7 +101,7 @@ static const char* const CLIENT_USAGE =
 "  -c file1[,file2]   lista di file da rimuovere dal server se presenti.\n\n"
 ;
 
-// ======================================= DECLARATION: client.h functions ================================================
+// ======================================= DEFINITIONS: client.h functions ================================================
 
 int initializeClient() {
     // Initialize global state
@@ -172,7 +172,7 @@ int terminateClient() {
     return RES_OK;
 }
 
-// ======================================= DECLARATION: Inner functions ================================================
+// ======================================= DEFINITIONS: Inner functions ================================================
 
 int parseParam(int index, int opt, char* value) {
     CmdLineOpt_t* option = &options[index];
@@ -485,7 +485,7 @@ int handleOption(int index) {
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_CREATE | O_LOCK)) == SERVER_API_SUCCESS) {
+                if ((status = openFile(pathname, FLAG_CREATE | FLAG_LOCK)) == SERVER_API_SUCCESS) {
                     // [2]
                     if ((status = writeFile(pathname, dirname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error writing file '%s'", pathname);
@@ -523,7 +523,7 @@ int handleOption(int index) {
                 size_t buffSize = 0L;
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
+                if ((status = openFile(pathname, FLAG_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
                     if ((status = readFile(pathname, &buff, &buffSize)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error reading file '%s'", pathname);
@@ -554,7 +554,7 @@ int handleOption(int index) {
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
+                if ((status = openFile(pathname, FLAG_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
                     if ((status = lockFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error locking file '%s'", pathname);
@@ -584,7 +584,7 @@ int handleOption(int index) {
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_EMPTY)) == SERVER_API_SUCCESS) {
+                if ((status = openFile(pathname, FLAG_EMPTY)) == SERVER_API_SUCCESS) {
                     // [2]
                     if ((status = unlockFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error locking file '%s'", pathname);
@@ -614,7 +614,7 @@ int handleOption(int index) {
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, O_LOCK)) == SERVER_API_SUCCESS) {
+                if ((status = openFile(pathname, FLAG_LOCK)) == SERVER_API_SUCCESS) {
                     // [2]
                     if ((status = removeFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error removing file '%s'", pathname);

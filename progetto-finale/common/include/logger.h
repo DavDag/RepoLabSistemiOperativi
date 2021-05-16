@@ -47,6 +47,9 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
 #else
     static const char* const COLOR[] = { "", "", "", "", "", "", "" };
 #endif
+
+    // Save copy of errno
+    int errno_s = errno;
     
     // Filter based on loglevel
     if (get_log_level() < loglevel || (loglevel < LOG_LEVEL_CRITICAL || loglevel > LOG_LEVEL_VERBOSE)) return;
@@ -71,7 +74,7 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
     va_end(args);
 
     // Log errno if needed
-    if (loglevel == LOG_LEVEL_PERROR) fprintf(stream, ": %s", strerror(errno));
+    if (loglevel == LOG_LEVEL_PERROR) fprintf(stream, ": %s", strerror(errno_s));
 
     // Add newline, reset color
     fprintf(stream, "%s\n", COLOR[6]);

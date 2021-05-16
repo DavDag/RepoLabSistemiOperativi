@@ -1,14 +1,15 @@
 #pragma once
 
+#include <common.h>
 #include <stdlib.h>
 #include <time.h>
 
 #define SERVER_API_SUCCESS  0 // On Success
 #define SERVER_API_FAILURE -1 // On Failure
 
-#define O_EMPTY  0x00 // openFile default flag
-#define O_CREATE 0x01 // openFile flag to create file
-#define O_LOCK   0x02 // openFile flag to lock file during creation
+#define FLAG_EMPTY  0x00 // Empty
+#define FLAG_CREATE 0x01 // Request creation
+#define FLAG_LOCK   0x02 // Request lock
 
 /**
  * Viene aperta una connessione AF_UNIX al socket file sockname. Se il
@@ -17,6 +18,9 @@
  * millisecondi e fino allo scadere del tempo assoluto ‘abstime’
  * specificato come terzo argomento. Ritorna 0 in caso di successo, -1
  * in caso di fallimento, errno viene settato opportunamente.
+ */
+/**
+ * Open a connection 
  */
 int openConnection(const char* sockname, int msec, const struct timespec abstime);
 
