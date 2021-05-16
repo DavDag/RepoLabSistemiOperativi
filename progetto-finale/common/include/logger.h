@@ -43,7 +43,7 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
     static const char* const DESCR[] = { "C", "!", "E", "W", "I", "V" };
 
 #ifndef LOG_WITHOUT_COLORS
-    static const char* const COLOR[] = { "\033[91m", "\033[35m", "\033[31m", "\033[33m", "\033[0m", "\033[2m", "\033[0m" };
+    static const char* const COLOR[] = { "\033[91m", "\033[35m", "\033[31m", "\033[33m", "\033[0m", "\033[90m", "\033[0m" };
 #else
     static const char* const COLOR[] = { "", "", "", "", "", "", "" };
 #endif

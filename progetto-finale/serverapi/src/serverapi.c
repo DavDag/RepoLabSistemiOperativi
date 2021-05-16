@@ -3,10 +3,12 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 
 static int sockfd = -1;
+static char buffer[4096];
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
     errno = 0; // Reset errno
@@ -21,17 +23,32 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sun_family = AF_UNIX;
     strcpy(serveraddr.sun_path, sockname);
-    if ((res = bind(sockfd, (struct sockaddr*) &serveraddr, sizeof(serveraddr))) < 0)
+    if ((res = connect(sockfd, (struct sockaddr*) &serveraddr, sizeof(serveraddr))) < 0)
         return SERVER_API_FAILURE;
 
     // 3. Send 'CREATE_SESSION' message
-    // TODO:
+    SockMessage_t msg = {
+        .uid = 1234, // TODO:
+        .type = MSG_REQ_OPEN_SESSION
+    };
+    writeMessage(sockfd, buffer, 4096, &msg);
 
     // 4. Returns SUCCESS
     return SERVER_API_SUCCESS;
 }
 
 int closeConnection(const char* sockname) {
+    errno = 0;
+    int res = -1;
+
+    // 1. Send 'CLOSE_SESSION' message
+    // TODO:
+
+    // 2. Close socket
+    if ((res = close(sockfd)) < 0)
+        return SERVER_API_FAILURE;
+
+    // 3. Returns SUCCESS
     return SERVER_API_SUCCESS;
 }
 

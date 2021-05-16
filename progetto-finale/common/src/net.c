@@ -1,6 +1,7 @@
 #include "net.h"
 
 #include "utils.h"
+#include "logger.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -29,43 +30,50 @@ int writeN(int fd, char* buf, size_t size);
  * Write 'size' bytes from data into buffer.
  * Increments buf by size.
  */
-void writeToBuffer(char* data, char** buf, size_t size);
+void writeToBuffer(void* data, char** buf, size_t size);
 
 /**
  * Read 'size' bytes from buffer into data.
  * Increments buf by size.
  */
-void readFromBuffer(char* data, char** buf, size_t size);
+void readFromBuffer(void* data, char** buf, size_t size);
 
-void convertOffsetToPtr(const char* begin, MsgPtr_t* data);
-void convertPtrToOffset(const char* begin, MsgPtr_t* data);
+// Converts content of 'data' from integer to char*
+void convertOffsetToPtr(char* begin, MsgPtr_t* data);
+
+// Converts content of 'data' from char* to integer
+void convertPtrToOffset(char* begin, MsgPtr_t* data);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
-int readMsg(long fd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
+int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
     errno = 0;
     int res = -1;
-    const char* bbegin = buffer;
+    char* bbegin = buffer;
 
     // 1. Read size
     int msgSize = 0;
-    if ((res = readN(fd, &msgSize, sizeof(msgSize))) != 1)
+    if ((res = readN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
     if (msgSize > bufferSize) {
         errno = ENOMEM;
         return -1;
     }
 
-    // 2. Read message (into temp buffer)
+    // 2. Read socket (into temp buffer)
     memset(buffer, 0, msgSize * sizeof(char));
-    if ((res = readN(fd, buffer, sizeof(char) * msgSize)) != -1)
+    if ((res = readN(socketfd, buffer, sizeof(char) * msgSize)) != 1)
         return res;
     
-    // 3. Process message (from temp buffer)
+    // 3. Read message (from temp buffer)
+    
     // UID
     readFromBuffer(&msg->uid, &buffer, sizeof(UID_t));
-   // Type
+
+    // Type
     readFromBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
+    
+    // Body
     switch (msg->type)
     {
         case MSG_REQ_OPEN_SESSION:
@@ -80,6 +88,7 @@ int readMsg(long fd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
+            // TODO:
             break;
         }
 
@@ -129,21 +138,62 @@ int readMsg(long fd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
     return 1;
 }
 
-int writeMsg(long fc, char* buffer, size_t bufferSize, SockMessage_t* msg) {
+int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
     errno = 0;
     int res = -1;
+    char* bbegin = buffer;
 
     // 1. Process message
+    switch (msg->type)
+    {
+        case MSG_REQ_OPEN_SESSION:
+        case MSG_REQ_CLOSE_SESSION:
+        case MSG_REQ_OPEN_FILE:
+        case MSG_REQ_CLOSE_FILE:
+        case MSG_REQ_READ_FILE:
+        case MSG_REQ_LOCK_FILE:
+        case MSG_REQ_UNLOCK_FILE:
+        case MSG_REQ_REMOVE_FILE:
+        case MSG_REQ_READ_N_FILES:
+        case MSG_REQ_WRITE_FILE:
+        case MSG_REQ_APPEND_TO_FILE:
+        {
+            // TODO:
+            break;
+        }
 
-    // 2. Write size
+        case MSG_RESP_SIMPLE:
+        {
+            // TODO:
+            break;
+        }
 
-    // 3. Write message
+        case MSG_RESP_WITH_FILES:
+        {
+            // TODO:
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    // 2. Write message (into tmp buffer)
+    writeToBuffer(&msg->uid, &buffer, sizeof(UID_t));
+    writeToBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
+
+    // 3. Write buffer (into socket)
+    int msgSize = buffer - bbegin;
+    if ((res = writeN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
+        return res;
+    if ((res = writeN(socketfd, buffer, msgSize * sizeof(char))) != 1)
+        return res;
 
     return 1;
 }
 
 void freeMessage(SockMessage_t* msg) {
-
+    // TODO:
 }
 
 // ======================================= DEFINITIONS: Inner functions =============================================
@@ -206,22 +256,22 @@ int writeN(int fd, char* buf, size_t size) {
     return 1;
 }
 
-void writeToBuffer(char* data, char** buf, size_t size) {
+void writeToBuffer(void* data, char** buf, size_t size) {
     // buffer <= data
     memcpy(*buf, data, size);
     *buf += size;
 }
 
-void readFromBuffer(char* data, char** buf, size_t size) {
+void readFromBuffer(void* data, char** buf, size_t size) {
     // buffer => data
     memcpy(data, *buf, size);
     *buf += size;
 }
 
-void convertOffsetToPtr(const char* begin, MsgPtr_t* data) {
+void convertOffsetToPtr(char* begin, MsgPtr_t* data) {
     data->ptr = begin + data->i;
 }
 
-void convertPtrToOffset(const char* begin, MsgPtr_t* data) {
+void convertPtrToOffset(char* begin, MsgPtr_t* data) {
     data->i = data->ptr - begin; 
 }

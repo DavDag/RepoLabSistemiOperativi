@@ -374,19 +374,14 @@ int handleOption(int index) {
         case OPT_SOCKET_FILE:
         {
             socket_file = option.filename;
-
-            // Log operation data
-            if (is_extended_log_enabled)
-                LOG_INFO("{-f} Socket file changed into '%s'", option.filename);
-
-            LOG_VERB("Socket filename updated");
+            LOG_VERB("{-f} Socket file changed into '%s'", option.filename);
             break;
         }
 
         case OPT_LOG_ENABLED:
         {
             is_extended_log_enabled = 1;
-            LOG_INFO("Enabled per-operation logging");
+            LOG_VERB("Enabled per-operation logging");
             break;
         }
         

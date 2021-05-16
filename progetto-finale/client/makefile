@@ -2,7 +2,7 @@ OBJECTS := $(patsubst $(SOURCES_DIR)/%.c,$(OBJECTS_DIR)/%.o,$(wildcard $(SOURCES
 EXE := $(BINARIES_DIR)/main
 
 INCLUDES += -I "../serverapi/include"
-LIBS += -L$(COMMON_LIB_DIR) -lcommon -L$(SERVERAPI_LIB_DIR) -lserverapi -Wl,-rpath=$(SERVERAPI_LIB_DIR)
+LIBS += -L$(SERVERAPI_LIB_DIR) -lserverapi -Wl,-rpath=$(SERVERAPI_LIB_DIR)
 
 .PHONY: all
 

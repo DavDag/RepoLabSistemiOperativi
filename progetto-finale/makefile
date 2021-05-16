@@ -2,7 +2,7 @@ CC       =  gcc
 CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors -fPIC
 INCLUDES = -I $(PWD)/common/include -I ./include
 LDFLAGS  = 
-LIBS     = 
+LIBS     = -L$(PWD)/common/$(BINARIES_DIR) -lcommon
 OPTFLAGS = -g
 AR       =  ar
 ARFLAGS  =  rvs
@@ -12,7 +12,6 @@ OBJECTS_DIR  := obj
 BINARIES_DIR := bin
 
 SERVERAPI_LIB_DIR  := $(PWD)/serverapi/$(BINARIES_DIR)
-COMMON_LIB_DIR     := $(PWD)/common/$(BINARIES_DIR)
 
 export
 
@@ -39,16 +38,16 @@ test3:
 # Shortcuts to run binaries
 #
 run-client:
-	$(MAKE) -C client simple-run ARGS="-h -p"
+	$(MAKE) -C client simple-run ARGS="-p -L5 -w ./dir"
 
 run-valgrind-client:
-	$(MAKE) -C client valgrind-test ARGS="-h -p"
+	$(MAKE) -C client valgrind-test ARGS="-p -w ./dir"
 
 run-server:
-	$(MAKE) -C server simple-run ARGS="-h -p"
+	$(MAKE) -C server simple-run ARGS=""
 
 run-valgrind-server:
-	$(MAKE) -C server valgrind-test ARGS="-h -p"
+	$(MAKE) -C server valgrind-test ARGS=""
 
 #
 # Testing
@@ -63,6 +62,7 @@ test-client-valgrind-quiet:
 	$(MAKE) test-client-impl TARGET=valgrind-test-quiet
 
 test-client-impl:
+	$(MAKE) -C server simple-run &
 	$(MAKE) -C client $(TARGET) ARGS="-p -f ./dir/socket -w ./dir -w ./dir,n=32"
 	$(MAKE) -C client $(TARGET) ARGS="-p -W ./file1 -W ./file1,./dir/file2,./file3 -D ./dir"
 	$(MAKE) -C client $(TARGET) ARGS="-p -r ./file1 -t 128 -r./dir/file2,./file3"

@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-#define DEFAULT_SOCK_FILE "./cs_sock"
+#define DEFAULT_SOCK_FILE "../cs_sock"
 
 // TODO: Make a function to generate 128 bit UUID using Version 4.
 
@@ -141,3 +141,5 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  * \retval  1 : on success
  */
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
+
+void freeMessage(SockMessage_t* msg);
