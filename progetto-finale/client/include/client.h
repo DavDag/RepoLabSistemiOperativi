@@ -17,7 +17,7 @@ int initializeClient();
  * Update internal state by saving parsed options and handles
  * commands that have priority (like -h or -p).
  * 
- * If the options buffer max capacity is reached, it stopts
+ * If the options buffer max capacity is reached, it stops
  * parsing and returns RES_OK.
  * 
  * Returns RES_ERROR if argv format is incorrect.

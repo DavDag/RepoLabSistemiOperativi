@@ -2,23 +2,23 @@
 #include "client.h"
 
 int main(int argc, char** argv) {
-    // Set global log level to INFO
-    // set_log_level(LOG_LEVEL_VERBOSE);
     set_log_level(LOG_LEVEL_INFO);
 
-    int status = RES_OK;
+    // Do-While just for better error handling
+    do {
+        // Initialize client and its internal state. Must be called before anything else
+        if (initializeClient() != RES_OK) break;
+        
+        // Start parsing command line arguments
+        if (parseArguments(argc, argv) != RES_OK) break;
+        
+        // Start handling options (communicating with server if needed)
+        if (handleOptions() != RES_OK) break;
 
-    // Initialize client and its internal state. Must be called before anything else
-    if (status == RES_OK) status = initializeClient();
-    
-    // Start parsing command line arguments
-    if (status == RES_OK) status = parseArguments(argc, argv);
-    
-    // Start handling options (communicating with server if needed)
-    if (status == RES_OK) status = handleOptions();
-    
+    } while(0);
+
     // Terminate client and its internal state releasing resources
-    status = terminateClient();
+    terminateClient();
 
     return EXIT_SUCCESS;
 }
