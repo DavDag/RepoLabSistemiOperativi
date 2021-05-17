@@ -141,6 +141,22 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  */
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
 
-void freeMessage(SockMessage_t* msg);
+/**
+ * Read EXACLTY N bytes from the filedescriptor 'fd'
+ * 
+ * \retval -1 : on error (errno set)
+ * \retval  0 : when one of the inner 'read' call returns EOF
+ * \retval  1 : on success
+ */
+int readN(int fd, char* buf, size_t size);
+
+/**
+ * Write EXACLTY N bytes from the filedescriptor 'fd'
+ * 
+ * \retval -1 : on error (errno set)
+ * \retval  0 : when one of the inner 'write' call returns 0
+ * \retval  1 : on success
+ */
+int writeN(int fd, char* buf, size_t size);
 
 #endif // NET_H

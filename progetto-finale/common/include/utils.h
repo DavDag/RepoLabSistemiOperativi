@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#define MAX(a, b) ((a) > (b)) ? (a) : (b)
+#define MIN(a, b) ((a) < (b)) ? (a) : (b)
+
 /*
  * Returns -1 for conversion error
  * Returns -2 for range error

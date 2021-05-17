@@ -24,7 +24,6 @@ int main(int argc, char** argv) {
     } while(0);
 
     // Terminate server and its internal state releasing resources
-    terminateClient();
-
+    terminateSever();
     return EXIT_SUCCESS;
 }

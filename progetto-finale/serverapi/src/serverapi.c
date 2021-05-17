@@ -7,15 +7,15 @@
 #include <string.h>
 #include <errno.h>
 
-static int sockfd = -1;
-static char buffer[4096];
+static int gSocketFd = -1;
+static char gBuffer[4096];
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
-    errno = 0; // Reset errno
+    errno = 0;
     int res = -1;
 
     // 1. Create socket
-    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+    if ((gSocketFd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
         return SERVER_API_FAILURE;
     
     // 2. Connect to server
@@ -23,7 +23,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sun_family = AF_UNIX;
     strcpy(serveraddr.sun_path, sockname);
-    if ((res = connect(sockfd, (struct sockaddr*) &serveraddr, sizeof(serveraddr))) < 0)
+    if ((res = connect(gSocketFd, (struct sockaddr*) &serveraddr, sizeof(serveraddr))) < 0)
         return SERVER_API_FAILURE;
 
     // 3. Send 'CREATE_SESSION' message
@@ -31,7 +31,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
         .uid = UUID_new(),
         .type = MSG_REQ_OPEN_SESSION
     };
-    writeMessage(sockfd, buffer, 4096, &msg);
+    writeMessage(gSocketFd, gBuffer, 4096, &msg);
 
     // 4. Returns SUCCESS
     return SERVER_API_SUCCESS;
@@ -45,7 +45,7 @@ int closeConnection(const char* sockname) {
     // TODO:
 
     // 2. Close socket
-    if ((res = close(sockfd)) < 0)
+    if ((res = close(gSocketFd)) < 0)
         return SERVER_API_FAILURE;
 
     // 3. Returns SUCCESS

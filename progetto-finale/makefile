@@ -62,7 +62,6 @@ test-client-valgrind-quiet:
 	$(MAKE) test-client-impl TARGET=valgrind-test-quiet
 
 test-client-impl:
-	$(MAKE) -C server simple-run &
 	$(MAKE) -C client $(TARGET) ARGS="-p -f ./dir/socket -w ./dir -w ./dir,n=32"
 	$(MAKE) -C client $(TARGET) ARGS="-p -W ./file1 -W ./file1,./dir/file2,./file3 -D ./dir"
 	$(MAKE) -C client $(TARGET) ARGS="-p -r ./file1 -t 128 -r./dir/file2,./file3"

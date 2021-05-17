@@ -15,7 +15,7 @@
 #include <common.h>
 #include <serverapi.h>
 
-// ======================================== DECLARATIONS: Types ================================================
+// ======================================== DECLARATIONS: Types =====================================================
 
 typedef enum {
     OPT_NONE               =  0, // Default
@@ -62,17 +62,17 @@ typedef struct {
     };
 } CmdLineOpt_t;
 
-// ======================================== DECLARATIONS: Inner functions ============================================
+// ======================================== DECLARATIONS: Inner functions ===========================================
 
 int parseParam(int, int, char*);
 int hasPriority(CmdLineOptType_t);
 int handleOption(int);
 int freeOption(int);
 
-// ======================================= DEFINITIONS: Global vars ================================================
+// ======================================= DEFINITIONS: Global vars =================================================
 
-static const char* socket_file = NULL;
-static int is_extended_log_enabled = 0;
+static const char* gSocketFilename = NULL;
+static int gIsExtendedLogEnabled = 0;
 static CmdLineOpt_t options[MAX_OPTIONS_COUNT];
 static int optionsSize = 0;
 static const char* const CLIENT_USAGE =
@@ -101,13 +101,13 @@ static const char* const CLIENT_USAGE =
 "  -c file1[,file2]   lista di file da rimuovere dal server se presenti.\n\n"
 ;
 
-// ======================================= DEFINITIONS: client.h functions ================================================
+// ======================================= DEFINITIONS: client.h functions ==========================================
 
 int initializeClient() {
     // Initialize global state
     LOG_VERB("Initializing client state...");
-    socket_file = DEFAULT_SOCK_FILE;
-    is_extended_log_enabled = 0;
+    gSocketFilename = DEFAULT_SOCK_FILE;
+    gIsExtendedLogEnabled = 0;
     optionsSize = 0;
     return RES_OK;
 }
@@ -139,7 +139,7 @@ int parseArguments(int argc, char** argv) {
 int handleOptions() {
     // Open connection
     const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
-    if (openConnection(socket_file, 250, abstime) != RES_OK) {
+    if (openConnection(gSocketFilename, 250, abstime) != RES_OK) {
         LOG_ERRNO("Error opening connection");
         return RES_ERROR;
     }
@@ -153,7 +153,7 @@ int handleOptions() {
         }
     }
     // Close connection
-    if (closeConnection(socket_file) != RES_OK) {
+    if (closeConnection(gSocketFilename) != RES_OK) {
         LOG_ERRNO("Error closing connection");
         return RES_ERROR;
     }
@@ -172,7 +172,7 @@ int terminateClient() {
     return RES_OK;
 }
 
-// ======================================= DEFINITIONS: Inner functions ================================================
+// ======================================= DEFINITIONS: Inner functions =============================================
 
 int parseParam(int index, int opt, char* value) {
     CmdLineOpt_t* option = &options[index];
@@ -373,14 +373,14 @@ int handleOption(int index) {
 
         case OPT_SOCKET_FILE:
         {
-            socket_file = option.filename;
+            gSocketFilename = option.filename;
             LOG_VERB("{-f} Socket file changed into '%s'", option.filename);
             break;
         }
 
         case OPT_LOG_ENABLED:
         {
-            is_extended_log_enabled = 1;
+            gIsExtendedLogEnabled = 1;
             LOG_VERB("Enabled per-operation logging");
             break;
         }
@@ -390,7 +390,7 @@ int handleOption(int index) {
             usleep(option.val);
             
             // Log operation data
-            if (is_extended_log_enabled)
+            if (gIsExtendedLogEnabled)
                 LOG_INFO("{-t} Waited %dms", option.val);
 
             LOG_VERB("Process resumed");
@@ -426,7 +426,7 @@ int handleOption(int index) {
             }
 
             // Log operation data
-            if (is_extended_log_enabled)
+            if (gIsExtendedLogEnabled)
                 LOG_INFO("{-R} numFiles: %d, dirname: '%s' > %s ! Bytes wrote %llu",
                     option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
 
@@ -495,7 +495,7 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (is_extended_log_enabled)
+                if (gIsExtendedLogEnabled)
                     LOG_INFO("{-W} file: '%s', dirname: '%s' > %s ! Bytes wrote %llu",
                         pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
             }
@@ -533,7 +533,7 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (is_extended_log_enabled)
+                if (gIsExtendedLogEnabled)
                     LOG_INFO("{-r} file: '%s', dirname: '%s' > %s ! Bytes read %llu",
                         pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
             }
@@ -564,7 +564,7 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (is_extended_log_enabled)
+                if (gIsExtendedLogEnabled)
                     LOG_INFO("{-l} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files locked");
@@ -594,7 +594,7 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (is_extended_log_enabled)
+                if (gIsExtendedLogEnabled)
                     LOG_INFO("{-u} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files unlocked");
@@ -624,7 +624,7 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (is_extended_log_enabled)
+                if (gIsExtendedLogEnabled)
                     LOG_INFO("{-c} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
             }
             LOG_VERB("Files removed from server");

@@ -1,6 +1,8 @@
 OBJECTS := $(patsubst $(SOURCES_DIR)/%.c,$(OBJECTS_DIR)/%.o,$(wildcard $(SOURCES_DIR)/*.c))
 EXE := $(BINARIES_DIR)/main
 
+LIBS += -lpthread
+
 .PHONY: all
 
 all: $(EXE)

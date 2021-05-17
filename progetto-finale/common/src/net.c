@@ -9,24 +9,6 @@
 // ======================================= DECLARATIONS: Inner functions ============================================
 
 /**
- * Read EXACLTY N bytes from the filedescriptor 'fd'
- * 
- * \retval -1 : on error (errno set)
- * \retval  0 : when one of the inner 'read' call returns EOF
- * \retval  1 : on success
- */
-int readN(int fd, char* buf, size_t size);
-
-/**
- * Write EXACLTY N bytes from the filedescriptor 'fd'
- * 
- * \retval -1 : on error (errno set)
- * \retval  0 : when one of the inner 'write' call returns 0
- * \retval  1 : on success
- */
-int writeN(int fd, char* buf, size_t size);
-
-/**
  * Write 'size' bytes from data into buffer.
  * Increments buf by size.
  */
@@ -190,10 +172,6 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
         return res;
 
     return 1;
-}
-
-void freeMessage(SockMessage_t* msg) {
-    // TODO:
 }
 
 // ======================================= DEFINITIONS: Inner functions =============================================
