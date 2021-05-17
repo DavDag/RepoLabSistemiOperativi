@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef NET_H
+#define NET_H
+
 #include "uuid.h"
 #include <stdlib.h>
 
@@ -139,3 +142,5 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
 
 void freeMessage(SockMessage_t* msg);
+
+#endif // NET_H

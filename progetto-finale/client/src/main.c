@@ -3,7 +3,8 @@
 
 int main(int argc, char** argv) {
     // Set global log level to INFO
-    set_log_level(LOG_LEVEL_VERBOSE);
+    // set_log_level(LOG_LEVEL_VERBOSE);
+    set_log_level(LOG_LEVEL_INFO);
 
     int status = RES_OK;
 

@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef UTILS_H
+#define UTILS_H
+
 #include <errno.h>
 #include <stdlib.h>
 
@@ -24,3 +27,5 @@ void* mem_calloc(size_t, size_t);
  * Always returns a valid ptr or throw an error terminating the app
  */
 void* mem_realloc(void*, size_t);
+
+#endif // UTILS_H

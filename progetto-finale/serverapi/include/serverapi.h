@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef SERVER_API_H
+#define SERVER_API_H
+
 #include <common.h>
 #include <stdlib.h>
 #include <time.h>
@@ -129,3 +132,5 @@ int closeFile(const char* pathname);
  * client diverso da chi effettua la removeFile.
  */
 int removeFile(const char* pathname);
+
+#endif // SERVER_API_H

@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef UUID_H
+#define UUID_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -68,3 +71,5 @@ static inline const char* UUID_to_String(UUID_t u) {
     );
     return _inn_buffer;
 }
+
+#endif // UUID_H

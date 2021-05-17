@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef LOGGER_H
+#define LOGGER_H
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -79,3 +82,5 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
     // Add newline, reset color
     fprintf(stream, "%s\n", COLOR[6]);
 }
+
+#endif // LOGGER_H

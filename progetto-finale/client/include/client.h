@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef CLIENT_H
+#define CLIENT_H
+
 #define MAX_OPTIONS_COUNT 128
 
 /**
@@ -35,3 +38,5 @@ int handleOptions();
  * MUST be called after any other function.
  */
 int terminateClient();
+
+#endif // CLIENT_H
