@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
             LOG_ERRNO("ERROR reading msg");
             exit(EXIT_FAILURE);
         }
-        if (n != 0) LOG_INFO("Msg arrived: uid=%llu,type=%d", msg.uid, msg.type);
+        if (n != 0) LOG_INFO("Msg arrived: uid=%s,type=%d", UUID_to_String(msg.uid), msg.type);
         else        LOG_INFO("Connection dropped from client.");
 
         LOG_INFO("Terminating client connection...");

@@ -1,13 +1,9 @@
 #pragma once
 
+#include "uuid.h"
 #include <stdlib.h>
 
 #define DEFAULT_SOCK_FILE "../cs_sock"
-
-// TODO: Make a function to generate 128 bit UUID using Version 4.
-
-// Unique identifier type
-typedef unsigned long long UID_t;
 
 /**
  * To be able to send ptr's via socket, they needs to be converted
@@ -86,7 +82,7 @@ typedef struct {
  *                 p r o v a . t x t \0  p i p p o \0
  */
 typedef struct {
-    UID_t uid;                           // Unique identifier for message
+    UUID_t uid;                           // Unique identifier for message
     SockeMessageType_t type;             // Type of message
     union {
         struct {

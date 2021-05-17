@@ -28,7 +28,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 
     // 3. Send 'CREATE_SESSION' message
     SockMessage_t msg = {
-        .uid = 1234, // TODO:
+        .uid = UUID_new(),
         .type = MSG_REQ_OPEN_SESSION
     };
     writeMessage(sockfd, buffer, 4096, &msg);

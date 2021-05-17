@@ -46,10 +46,10 @@ void convertPtrToOffset(char* begin, MsgPtr_t* data);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
-int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
+int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* msg) {
     errno = 0;
     int res = -1;
-    char* bbegin = buffer;
+    char* buffer = bbegin;
 
     // 1. Read size
     int msgSize = 0;
@@ -68,7 +68,7 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
     // 3. Read message (from temp buffer)
     
     // UID
-    readFromBuffer(&msg->uid, &buffer, sizeof(UID_t));
+    readFromBuffer(&msg->uid, &buffer, sizeof(UUID_t));
 
     // Type
     readFromBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
@@ -138,10 +138,10 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
     return 1;
 }
 
-int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg) {
+int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* msg) {
     errno = 0;
     int res = -1;
-    char* bbegin = buffer;
+    char* buffer = bbegin;
 
     // 1. Process message
     switch (msg->type)
@@ -179,14 +179,14 @@ int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* 
     }
 
     // 2. Write message (into tmp buffer)
-    writeToBuffer(&msg->uid, &buffer, sizeof(UID_t));
+    writeToBuffer(&msg->uid, &buffer, sizeof(UUID_t));
     writeToBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
 
     // 3. Write buffer (into socket)
     int msgSize = buffer - bbegin;
     if ((res = writeN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
-    if ((res = writeN(socketfd, buffer, msgSize * sizeof(char))) != 1)
+    if ((res = writeN(socketfd, bbegin, msgSize * sizeof(char))) != 1)
         return res;
 
     return 1;
