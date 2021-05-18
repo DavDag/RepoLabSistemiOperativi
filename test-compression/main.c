@@ -5,24 +5,12 @@
 
 #include "testdata.h"
 
-#define BUFFER_SIZE 32768
-static char buffer[BUFFER_SIZE];
-
-/**
- * 
- * HUFFMAN CODING
- * 
- * sources:
- *    https://en.wikipedia.org/wiki/Huffman_coding
- * 
- */
-
 typedef struct { unsigned int freq; unsigned char c; } DictEnty_t;
 typedef struct { int v, f, l, r; } TreeEntry_t;
-typedef struct { int size, b[8]; } TableEntry_t;
+typedef struct { int size, b[4]; } TableEntry_t;
 typedef struct { int index; TableEntry_t tbl; } QueueEntry_t;
 
-static size_t compress(char* buffer, size_t size) {
+static char* compress(char* buffer, size_t size, size_t* compressedSize) {
     if (size == 0) return size;
 
     struct timeval begin, end;
@@ -127,8 +115,6 @@ static size_t compress(char* buffer, size_t size) {
     static QueueEntry_t queue[256];
     memset(table, 0, sizeof(TableEntry_t) * 256);
     memset(queue, 0, sizeof(QueueEntry_t) * 256);
-    TableEntry_t currCode;
-    memset(&currCode, 0, sizeof(TableEntry_t));
     int qIndex = 0;
     queue[qIndex++].index = tmpTreeIndexL;
     while (qIndex > 0) {
@@ -157,7 +143,6 @@ static size_t compress(char* buffer, size_t size) {
         }
     }
 
-    /*
     printf("=========TABLE=========\n");
     for (int i = 0; i < 256; ++i) {
         if (table[i].size == 0) continue;
@@ -171,16 +156,47 @@ static size_t compress(char* buffer, size_t size) {
         printf("\n");
     }
     printf("=======================\n");
-    */
 
     // Size estimation
     size_t totalSizeInBits = 0;
     for (int i = 0; i < size; ++i)
         totalSizeInBits += table[(unsigned int) buffer[i]].size;
-    
     size_t totalSize = (totalSizeInBits / 8) + (totalSizeInBits % 8 != 0);
 
+    *compressedSize = totalSize;
+
     // Apply encoding
+    // memset(bufferO, 0, totalSize);
+    int index = 0;
+    for (int i = 0; i < size; i += 4) {
+        const char tmpBuffer[4] = { buffer[i + 0], buffer[i + 1], buffer[i + 2], buffer[i + 3] };
+        buffer[i + 0] = 0; buffer[i + 1] = 0; buffer[i + 2] = 0; buffer[i + 3] = 0;
+        for (int j = 0; j < 4; ++j) {
+            const unsigned int tableIndex = (unsigned int) tmpBuffer[j];
+            const int codeSize            = table[tableIndex].size;
+            const unsigned int offset     = 7 - (index % 8);
+            buffer[index / 8]            |= ((table[tableIndex].b[0] & 0xFF) >> offset);
+            index                        += codeSize;
+
+            printf("Adding %c offset %.2d: ", tmpBuffer[j], offset);
+            for (int ci = 0; ci < codeSize; ++ci) {
+                const int byteInd = ci / 32;
+                const int bitInd = 31 - (ci % 32);
+                const int bitValue = (table[tableIndex].b[byteInd] & (1 << bitInd));
+                printf("%c", (bitValue) ? '1' : '0');
+            }
+            printf("\n");
+        }
+    }
+    printf("buffer: ");
+    for(int i = 0; i < (index / 8) + 1; ++i) {
+        for (int ci = 0; ci < 8; ++ci) {
+            const int bitInd = 7 - ci;
+            const int bitValue = (buffer[i] & (1 << bitInd));
+            printf("%c", (bitValue) ? '1' : '0');
+        }
+    }
+    printf("\n");
 
     gettimeofday(&end, 0);
     long seconds = end.tv_sec - begin.tv_sec;
@@ -207,14 +223,14 @@ static size_t decompress(char* buffer, size_t size) {
 }
 
 int main(int argc, char** argv) {
-    int testsSize = 5;
+    int testsSize = 2;
     const char* const testsData[] = {
-        TEXT_EMPTY,
+        //TEXT_EMPTY,
         TEXT_SHORT,
         TEXT_BEST_CASE,
-        TEXT_1,
-        TEXT_2,
-        TEXT_3,
+        //TEXT_1,
+        //TEXT_2,
+        //TEXT_3,
     };
 
     for (int i = 0; i < testsSize; ++i) {
@@ -224,8 +240,10 @@ int main(int argc, char** argv) {
         size_t testsDataSize = strlen(testsData[i]);
         memcpy(buffer, testsData[i], testsDataSize);
 
-        size_t compressedSize = compress(buffer, testsDataSize);
-        size_t decompressedSize = decompress(buffer, compressedSize);
+        size_t compressedSize;
+        size_t decompressedSize;
+        const char* compressedData = compress(buffer, testsDataSize, &compressedSize);
+        const char* decompressedData = decompress(compressedData, compressedSize, &decompressedSize);
 
         int result = (decompressedSize == testsDataSize) && ((memcmp(testsData[i], buffer, testsDataSize)) == 0);
         result++;

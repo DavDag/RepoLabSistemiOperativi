@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS += -std=c99 -Wall -Werror -g
+CFLAGS += -std=c11 -Wall -Werror -g
 OPTFLAGS = -O3
 
-TARGETS = main
+TARGETS = main2
 
 .SUFFIXES: .c .h
 
