@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS += -std=c99 -Wall -Werror -g
-OPTFLAGS = -O3 
+OPTFLAGS = -O3
 
 TARGETS = main
 
