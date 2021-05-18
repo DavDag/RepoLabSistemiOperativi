@@ -19,6 +19,7 @@
 #define PIPE_WRITE_END 1
 
 #define EXIT_REQUESTED 1000 // Message sent from main thread to select thread to request to stop reading
+#define NEW_CONNECTION 1001 // Message sent from main thread to select thread to notify client connection
 
 // ======================================== DECLARATIONS: Types =====================================================
 
@@ -98,11 +99,16 @@ int runServer() {
             LOG_ERRNO("Unable to accept client");
             continue;
         }
-        LOG_VERB("Client accepted");
 
-        // Update set & max 
-        FD_SET(newConnFd, &gFdSet);
-        gMaxFd = MAX(gMaxFd, newConnFd);
+        // Send message to Select thread
+        int messageToSend[2] = { NEW_CONNECTION, newConnFd };
+        if (writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int)) < 0) {
+            LOG_ERRNO("Unable to send message to select thread");
+            LOG_WARN("Client cannot be accepted.");
+            if (close(newConnFd) < 0)
+                LOG_ERRNO("Error closing client connection");
+            continue;
+        }
     }
 
     // Send request to exit from select thread
@@ -140,6 +146,7 @@ int terminateSever() {
     for (int i = 0; i < gWorkerThreadsSize; ++i)
         if (pthread_join(gWorkerThreads[i], NULL) < 0)
         LOG_ERRNO("Error joining worker thread #%d", i + 1);
+    free(gWorkerThreads);
 
     // Returns success
     return RES_OK;
@@ -260,16 +267,37 @@ void* selectThreadFun(void* args) {
         // HAS PRIORITY: Check if message comes from MainThread
         if (FD_ISSET(mainToSelectPipe[PIPE_READ_END], &fds_cpy)) {
             int message;
+
+            // Read message type
             if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0)
                 LOG_ERRNO("Error reading from pipe");
             else {
                 LOG_VERB("Message received from main: %d", message);
+
+                // Main thread received a signal, select thread should stop
                 if (message == EXIT_REQUESTED) break;
+
+                // Main thread accepted a new request, add it to the set
+                else if (message == NEW_CONNECTION) {
+                    // Read file descriptor
+                    if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0)
+                        LOG_ERRNO("Error reading new connection descriptor from pipe");
+                    else {
+                        FD_SET(message, &gFdSet);      // Add descriptor to set
+                        gMaxFd = MAX(gMaxFd, message); // Update max
+                        LOG_VERB("Client connected on FD#%02d !", message);
+                    }
+                }
             }
         }
 
         // Check for active descriptors
+        int newMaxFd = 0;
         for(int fd = 0; fd <= gMaxFd; fd++) {
+            // Find new max
+            newMaxFd = fd;
+
+            // Check file descriptor
             if (FD_ISSET(fd, &fds_cpy)) {
                 // Already checked
                 if (fd == mainToSelectPipe[PIPE_READ_END]) continue;
@@ -280,13 +308,20 @@ void* selectThreadFun(void* args) {
                     continue;
                 }
                 if (res == 0) {
-                    // TODO: Handle client disconnect
+                    // Client disconnected !
+                    if (close(fd) < 0)
+                        LOG_ERRNO("Error closing socket #%02d", fd);
+                    // Update fd set
+                    FD_CLR(fd, &gFdSet);                 // Remove descriptor from set
+                    newMaxFd = (fd == 0) ? 0 : (fd - 1); // Remove this descriptor from max calculation
+                    LOG_VERB("Client on FD#%02d disconnected !", fd);
                 } else {
                     // TODO: Message received !
                     LOG_INFO("New message: uuid: %s, type: %d", UUID_to_String(msg.uid), msg.type);
                 }
             }
         }
+        gMaxFd = newMaxFd;
     }
 
     return NULL;
