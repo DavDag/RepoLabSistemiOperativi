@@ -23,12 +23,13 @@ typedef struct { int size, b[8]; } TableEntry_t;
 typedef struct { int index; TableEntry_t tbl; } QueueEntry_t;
 
 static size_t compress(char* buffer, size_t size) {
-    static DictEnty_t dict[256];
+    if (size == 0) return size;
 
     struct timeval begin, end;
     gettimeofday(&begin, 0);
 
     // Intialize vars
+    static DictEnty_t dict[256];
     for (int i = 0; i < 256; ++i)
         dict[i] = (DictEnty_t) { .freq = 0, .c = (unsigned char) i };
 
@@ -58,7 +59,7 @@ static size_t compress(char* buffer, size_t size) {
         }
 
     // Vars
-    int num_roots = first0, treeIndex = 0, tmpTreeIndexL = num_roots, tmpTreeIndexR = num_roots; 
+    int num_roots = first0 + 1, treeIndex = 0, tmpTreeIndexL = num_roots, tmpTreeIndexR = num_roots; 
     TreeEntry_t tree[num_roots * 2];
     for (int i = 0; i < num_roots; ++i)
         tree[i] = (TreeEntry_t) {
@@ -123,17 +124,9 @@ static size_t compress(char* buffer, size_t size) {
 
     // Encoding table
     static TableEntry_t table[256];
-    QueueEntry_t* queue = calloc(512, sizeof(QueueEntry_t));
+    static QueueEntry_t queue[256];
     memset(table, 0, sizeof(TableEntry_t) * 256);
-    for (int i = 0; i < 512; ++i) {
-        queue[i] = (QueueEntry_t) {
-            .index = 0,
-            .tbl = (TableEntry_t) {
-                .size = 0,
-                .b = {0,0,0,0,0,0,0,0},
-            },
-        };
-    }
+    memset(queue, 0, sizeof(QueueEntry_t) * 256);
     TableEntry_t currCode;
     memset(&currCode, 0, sizeof(TableEntry_t));
     int qIndex = 0;
@@ -164,6 +157,7 @@ static size_t compress(char* buffer, size_t size) {
         }
     }
 
+    /*
     printf("=========TABLE=========\n");
     for (int i = 0; i < 256; ++i) {
         if (table[i].size == 0) continue;
@@ -177,6 +171,7 @@ static size_t compress(char* buffer, size_t size) {
         printf("\n");
     }
     printf("=======================\n");
+    */
 
     // Size estimation
     size_t totalSizeInBits = 0;
@@ -184,7 +179,6 @@ static size_t compress(char* buffer, size_t size) {
         totalSizeInBits += table[(unsigned int) buffer[i]].size;
     
     size_t totalSize = (totalSizeInBits / 8) + (totalSizeInBits % 8 != 0);
-    printf("%lu bits, %lu bytes from %lu bytes\n", totalSizeInBits, totalSize, size);
 
     // Apply encoding
 
@@ -192,16 +186,12 @@ static size_t compress(char* buffer, size_t size) {
     long seconds = end.tv_sec - begin.tv_sec;
     long microseconds = end.tv_usec - begin.tv_usec;
     double elapsed = seconds + microseconds*1e-6;
-    printf("compression time: %.6fs\n", elapsed);
 
-    free(queue);
-
+    printf("Compression done !\n  time: %.6fs\n  size ratio: %.2f\n", elapsed, (float) totalSize / (float) size * 100.0f);
     return size;
 }
 
 static size_t decompress(char* buffer, size_t size) {
-    size_t new_size = size;
-    
     struct timeval begin, end;
     gettimeofday(&begin, 0);
 
@@ -211,15 +201,15 @@ static size_t decompress(char* buffer, size_t size) {
     long seconds = end.tv_sec - begin.tv_sec;
     long microseconds = end.tv_usec - begin.tv_usec;
     double elapsed = seconds + microseconds*1e-6;
-    printf("compression time: %.6fs\n", elapsed);
 
-    return new_size;
+    printf("Decompression done !\n  time: %.6fs\n  size ratio: %.2f\n", elapsed, (float) size / (float) size * 100.0f);
+    return size;
 }
 
 int main(int argc, char** argv) {
     int testsSize = 5;
     const char* const testsData[] = {
-        // TEXT_EMPTY,
+        TEXT_EMPTY,
         TEXT_SHORT,
         TEXT_BEST_CASE,
         TEXT_1,
@@ -227,9 +217,8 @@ int main(int argc, char** argv) {
         TEXT_3,
     };
 
-    int status = 0;
     for (int i = 0; i < testsSize; ++i) {
-        printf("test #%02d started\n", i + 1);
+        printf("test #%02d\n", i + 1);
         memset(buffer, 0, BUFFER_SIZE);
 
         size_t testsDataSize = strlen(testsData[i]);
@@ -238,8 +227,9 @@ int main(int argc, char** argv) {
         size_t compressedSize = compress(buffer, testsDataSize);
         size_t decompressedSize = decompress(buffer, compressedSize);
 
-        status = (decompressedSize == testsDataSize) && ((memcmp(testsData[i], buffer, testsDataSize)) == 0);
-        printf("test #%02d: %s\n", i + 1, (status) ? "SUCCESS" : "FAILURE");
+        int result = (decompressedSize == testsDataSize) && ((memcmp(testsData[i], buffer, testsDataSize)) == 0);
+        result++;
+        printf("\n");
     }
 
     return EXIT_SUCCESS;
