@@ -99,7 +99,6 @@ int main() {
     test("text 6", TEXT_6, strlen(TEXT_6));
     test_from_file("test.txt");
     test_from_file("test2.txt");
-    test_from_file("test3.txt");
     test_from_file("test4.txt");
     
     for (int i = 0; i < 32; ++i) {
