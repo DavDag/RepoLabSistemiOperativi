@@ -1,21 +1,22 @@
-CC = gcc
-CFLAGS += -std=c11 -Wall -Werror -g
-OPTFLAGS = -O3
+CC       =  gcc
+CFLAGS  += -std=c11 -Wall
+OPTFLAGS = -O3 -g
 
-TARGETS = main2
+.PHONY: all clean
 
-.SUFFIXES: .c .h
+TARGETS = main main2
 
-%: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
+all: $(TARGETS)
+
+./main: main.o
+	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
+
+./main2: main2.o
+	$(CC) $(CFLAGS) $(OPTFLAGS) -o $@ $^
+
+clean:
+	rm -rf *.o ./main ./main2
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) $(OPTFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(OPTFLAGS) -c -o $@ $<
 
-all : $(TARGETS)
-
-valgrind-test:
-	valgrind --leak-check=full ./main
-
-clean :
-	rm -f $(TARGETS)
