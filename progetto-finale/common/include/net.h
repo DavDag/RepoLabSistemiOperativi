@@ -36,9 +36,10 @@ typedef enum {
 typedef enum {
     RESP_STATUS_NONE          = 0, // Default
     RESP_STATUS_OK            = 1, // Success
-    RESP_STATUS_NOT_PERMITTED = 2, // Failure: EPERM
-    RESP_STATUS_INVALID_ARG   = 3, // Failure: EINVAL
-    RESP_STATUS_NOT_FOUND     = 4, // Failure: ENOENT
+    RESP_STATUS_GENERIC_ERROR = 2, // Error
+    RESP_STATUS_NOT_PERMITTED = 3, // Failure: EPERM
+    RESP_STATUS_INVALID_ARG   = 4, // Failure: EINVAL
+    RESP_STATUS_NOT_FOUND     = 5, // Failure: ENOENT
 } RespStatus_t;
 
 /**
@@ -95,7 +96,7 @@ typedef struct {
                 ResourcePath_t filename; // Filename
                 int contentLen;          // Length of content
                 MsgPtr_t content;        // Content
-            };                           // ? Files
+            } *files;                    // ? Files
         } response;                      // Response data
         struct {
             ResourcePath_t filename;     // Filename

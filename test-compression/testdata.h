@@ -1,12 +1,9 @@
 static const char* const TEXT_EMPTY = "";
-static const char* const TEXT_SHORT = "test short text, test number 1 named short text aa";
+static const char* const TEXT_SHORT1 = "test short text, test number 1 named short text aa";
+static const char* const TEXT_SHORT2 = "Ada banyak variasi tulisan Lorem Ipsum yang tersedia, tapi";
+static const char* const TEXT_SHORT3 = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 static const char* const TEXT_BEST_CASE = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-// TODO:
-// - Add bigger tests
-// - Add other languages tests
-// - Add worst case scenario
 
 static const char* const TEXT_1 = 
 "In computer science and information theory, a Huffman code is a particular type of optimal prefix"
@@ -77,4 +74,88 @@ static const char* const TEXT_3 =
 "Donec vehicula odio sed dolor cursus, in varius ante lacinia. Praesent in arcu suscipit, convallis ante sit amet, imperdiet enim. Curabitur tempus justo erat. Fusce nunc nunc, ultrices in leo ac, ultricies congue risus. Duis quis tellus augue. Vestibulum augue neque, molestie in augue quis, imperdiet pulvinar nisi. Nunc rutrum risus eu lacus tempus porta. Vestibulum tempor sed odio vel pretium. Nam consectetur libero metus, laoreet mollis libero porta in. Nam nec risus non ligula suscipit dignissim ut eget felis. Maecenas ultricies ullamcorper mollis. Phasellus ligula elit, rhoncus eget velit eu, bibendum tincidunt leo. Suspendisse at rutrum sapien, non tincidunt ligula. Nunc eget nunc sit amet neque tincidunt fringilla. Cras rutrum, nisl a dapibus efficitur, libero lacus tincidunt velit, ac congue nulla urna at nulla.\n"
 "Mauris pulvinar maximus est in tincidunt. Donec dignissim sagittis turpis, id sagittis enim volutpat at. Duis auctor ipsum et pharetra pellentesque. Fusce porta erat vel facilisis lobortis. Curabitur quis lectus et dolor aliquam convallis. Duis tempor est justo. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. In molestie risus vel elit fringilla aliquam. Cras dui nisi, feugiat tempus mi dapibus, gravida vehicula leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Maecenas placerat vitae est ac lobortis. In hac habitasse platea dictumst.\n"
 "Cras sit amet velit volutpat, vulputate sem vitae, blandit arcu. Nullam tristique, felis vel vestibulum sodales, ipsum ipsum vulputate sapien, eu finibus dui quam ac augue. Proin convallis augue porttitor dolor semper, at cursus nisi cursus. Suspendisse potenti. Mauris non libero elementum, aliquet diam eu, sollicitudin magna. Suspendisse sit amet augue tortor. Praesent non sapien blandit, vehicula diam.\n"
+;
+
+static const char* const TEXT_4 =
+"Ada banyak variasi tulisan Lorem Ipsum yang tersedia, tapi kebanyakan sudah mengalami\n"
+"perubahan bentuk, entah karena unsur humor atau kalimat yang diacak hingga nampak sangat\n"
+"tidak masuk akal. Jika anda ingin menggunakan tulisan Lorem Ipsum, anda harus yakin tidak\n"
+"ada bagian yang memalukan yang tersembunyi di tengah naskah tersebut. Semua generator Lorem\n"
+"Ipsum di internet cenderung untuk mengulang bagian-bagian tertentu. Karena itu inilah\n"
+"generator pertama yang sebenarnya di internet. Ia menggunakan kamus perbendaharaan yang\n"
+"terdiri dari 200 kata Latin, yang digabung dengan banyak contoh struktur kalimat untuk\n"
+"menghasilkan Lorem Ipsun yang nampak masuk akal. Karena itu Lorem Ipsun yang dihasilkan\n"
+"akan selalu bebas dari pengulangan, unsur humor yang sengaja dimasukkan, kata yang tidak \n"
+"esuai dengan karakteristiknya dan lain sebagainya.\n"
+"Tidak seperti anggapan banyak orang, Lorem Ipsum bukanlah teks-teks yang diacak. Ia berakar\n"
+"dari sebuah naskah sastra latin klasik dari era 45 sebelum masehi, hingga bisa dipastikan\n"
+"usianya telah mencapai lebih dari 2000 tahun. Richard McClintock, seorang professor Bahasa\n"
+"Latin dari Hampden-Sidney College di Virginia, mencoba mencari makna salah satu kata latin\n"
+"yang dianggap paling tidak jelas, yakni consectetur, yang diambil dari salah satu bagian\n"
+"Lorem Ipsum. Setelah ia mencari maknanya di di literatur klasik, ia mendapatkan sebuah\n"
+"sumber yang tidak bisa diragukan. Lorem Ipsum berasal dari bagian 1.10.32 dan 1.10.33 dari\n"
+"naskah \"de Finibus Bonorum et Malorum\" (Sisi Ekstrim dari Kebaikan dan Kejahatan) karya\n"
+"Cicero, yang ditulis pada tahun 45 sebelum masehi. BUku ini adalah risalah dari teori etika\n"
+"yang sangat terkenal pada masa Renaissance. Baris pertama dari Lorem Ipsum,\n"
+;
+
+static const char* const TEXT_5 =
+"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec ullamcorper, dolor at mattis\n"
+"luctus, justo odio sodales odio, a vehicula sem justo sed sapien. Mauris rhoncus non velit ut eleifend.\n"
+"Duis accumsan nec tortor in varius. Mauris vulputate, arcu et egestas sollicitudin,\n"
+"nunc ex vestibulum tellus, ornare commodo metus augue non sapien. Aliquam semper, erat et\n"
+"landit egestas, magna dolor tempor urna, aliquet blandit sem ligula sit amet risus. Quisque\n"
+"aliquet urna metus, non sodales justo tincidunt vel. Sed ligula nibh, ultrices non nisl vel,\n"
+"bibendum convallis quam. In vitae consequat urna, nec imperdiet ligula. Praesent sit amet sem \n"
+"urpis. Sed eleifend urna diam, vel vestibulum erat bibendum quis. Mauris ut aliquet orci. Aenean\n"
+"urna dolor, fermentum nec lacus sit amet, placerat condimentum dolor. Nullam eu vehicula nunc,\n"
+"a tincidunt nisl. Nullam ac nisi quis metus gravida vestibulum a id magna. Curabitur congue\n"
+"porttitor felis, at cursus mauris. Aliquam erat volutpat.\n"
+"\n"
+"Cras tortor sem, luctus non dictum ultricies, mattis congue tortor. Ut maximus eros a libero\n"
+"dictum, sed hendrerit leo vulputate. Nullam eget dolor ligula. Praesent commodo tortor sem,\n"
+"id condimentum orci dignissim non. Pellentesque vitae eleifend metus. Aenean vehicula augue\n"
+"vitae ex dapibus porta. Nullam nec tristique lacus. Sed mattis sodales facilisis. Phasellus\n"
+"eu odio ex. Vestibulum aliquet faucibus nisl a feugiat. Nullam urna ipsum, tristique quis\n"
+"malesuada in, hendrerit sit amet nulla. Donec commodo leo quis ullamcorper varius. Aenean\n"
+"dictum venenatis varius. Quisque cursus libero ut libero mattis interdum.\n"
+"\n"
+"Duis lectus nibh, faucibus at malesuada ut, semper sit amet lacus. Quisque aliquam, felis et\n"
+"faucibus eleifend, felis dui posuere est, fringilla interdum est sapien eget nibh. Sed rhoncus\n"
+"iaculis pretium. Duis auctor euismod felis non vulputate. Nunc porta vehicula nisl id finibus.\n"
+"Aenean in consequat eros. Sed risus magna, lobortis eget interdum eget, eleifend vel elit.\n"
+"Curabitur nec faucibus risus. Curabitur ut nulla ultrices, pellentesque odio vitae, varius\n"
+"nunc. Aenean quis congue nibh, et iaculis ex. Phasellus et viverra velit. Aenean sit amet\n"
+"interdum ante, eget rhoncus elit. Nam tortor metus, blandit eu finibus vel, congue id augue.\n"
+"Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+;
+
+static const char* const TEXT_6 =
+"Suspendisse potenti. Duis ultricies mauris quam, a tincidunt lacus fermentum at.\n"
+"Interdum et malesuada fames ac ante ipsum primis in faucibus. Duis ligula elit,\n"
+"consequat sed blandit in, porttitor at nibh. Nunc rhoncus bibendum lobortis. Sed\n"
+"sit amet facilisis diam. Mauris imperdiet tincidunt auctor. Aenean viverra nisl in\n"
+"felis sollicitudin, sit amet tincidunt sem consectetur. Donec posuere, magna in\n"
+"ullamcorper pellentesque, enim purus suscipit dolor, non gravida lorem mauris id odio. Vivamus\n"
+"sapien ex, hendrerit a ligula non, consequat dignissim dui. Nam porta turpis tellus,\n"
+"malesuada eleifend est molestie eget. Duis facilisis sodales turpis. Aliquam tempor porttitor ullamcorper.\n"
+"Fusce hendrerit, purus eget sodales hendrerit, enim lorem posuere velit,\n"
+"eu maximus nibh elit vel lorem.\n"
+"\n"
+"Fusce pellentesque lorem a sem varius lobortis. Vivamus vel tempus felis, ut convallis \n"
+"x. Vivamus in aliquet eros. Donec sit amet ante venenatis, varius augue quis, mollis lectus.\n"
+"Aliquam venenatis urna consectetur gravida mollis. Nullam porta ullamcorper dui, ac sagitti\n"
+" tellus ultricies at. Ut sagittis mollis commodo. Mauris ultrices urna nec ex ornare, elementu\n"
+" varius ante sollicitudin. Fusce tincidunt, sapien non ultrices tincidunt, sapien nisi posuere dia\n"
+" , at eleifend ligula neque et massa.\n"
+"\n"
+"Sed ornare urna purus, eget porttitor leo ultricies eget. Curabitur imperdiet elit mauris,\n"
+"ac tempus nisl mollis vel. Ut non leo vitae odio pretium rutrum. Proin eu eros dolor. Phasellus ut \n"
+"orem quis dui fringilla scelerisque. Maecenas arcu tortor, laoreet eu porttitor in, conse\n"
+"uat eget ipsum. Integer leo ex, tristique sed imperdiet sed, cursus non eros. Morbi porta ex sit \n"
+"met sem bibendum placerat. Nam ut erat faucibus, placerat felis et, bibendum nisi. Etiam lorem\n"
+"nulla, facilisis sit amet dapibus et, tincidunt eget leo. Donec tempus augue in tortor laoreet,\n"
+"a pulvinar erat pharetra. Suspendisse efficitur nibh vel enim tincidunt accumsan. Sed\n"
+"suscipit tortor vel justo pharetra dapibus. Sed elit diam, eleifend non massa in, hendrerit placerat\n"
+"Vestibulum rutrum justo massa, quis vestibulum risus venenatis vel. Aenean pretium interdum vehicula."
 ;
