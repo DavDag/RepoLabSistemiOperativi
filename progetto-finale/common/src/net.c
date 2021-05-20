@@ -89,6 +89,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
             // Num files attached
             readFromBuffer(&msg->response.numFiles, &buffer, sizeof(int));
 
+            /* TODO:
             // ============ Filename ============
             ResourcePath_t* filename = &msg->response.filename;
 
@@ -110,6 +111,8 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
             // Data 'ptr'
             readFromBuffer(&msg->response.content, &buffer, sizeof(int));
             convertOffsetToPtr(bbegin, &msg->response.content);
+            */
+
             break;
         }
 
