@@ -12,7 +12,7 @@
  * To be able to send ptr's via socket, they needs to be converted
  * to offsets relative to message's begin.
  */
-typedef union { int i; char* ptr; } MsgPtr_t;
+typedef union { int i; const char* ptr; } MsgPtr_t;
 
 // Message's type
 typedef enum {
@@ -30,7 +30,7 @@ typedef enum {
     MSG_REQ_APPEND_TO_FILE = 11, // Request to append to file
     MSG_RESP_SIMPLE        = 20, // Basic response
     MSG_RESP_WITH_FILES    = 21, // Response with files attached
-} SockeMessageType_t;
+} SockMessageType_t;
 
 // Message's response status type
 typedef enum {
@@ -57,6 +57,12 @@ typedef struct {
     MsgPtr_t abs; // Absolute name str
     MsgPtr_t rel; // Relative name str
 } ResourcePath_t;
+
+typedef struct {
+    ResourcePath_t filename; // Filename
+    int contentLen;          // Length of content
+    MsgPtr_t content;        // Content
+} MsgFile_t;
 
 /**
  * Its the hearth of the communication.
@@ -86,30 +92,20 @@ typedef struct {
  *                 p r o v a . t x t \0  p i p p o \0
  */
 typedef struct {
-    UUID_t uid;                           // Unique identifier for message
-    SockeMessageType_t type;             // Type of message
+    UUID_t uid;                  // Unique identifier for message
+    SockMessageType_t type;     // Type of message
     union {
         struct {
-            RespStatus_t status;         // Status
-            int numFiles;                // Attached files count
-            struct {
-                ResourcePath_t filename; // Filename
-                int contentLen;          // Length of content
-                MsgPtr_t content;        // Content
-            } *files;                    // ? Files
-        } response;                      // Response data
+            RespStatus_t status; // Status
+            int numFiles;        // Attached files count
+            MsgFile_t *files;    // Files
+        } response;              // Response data
         struct {
-            ResourcePath_t filename;     // Filename
-            union {
-                int flags;               // Flags
-                struct {
-                    int contentLen;      // Length of content
-                    MsgPtr_t content;    // Content
-                };
-            };
-        } request;                       // Request data
+            int flags;           // Flags
+            MsgFile_t file;      // File
+        } request;               // Request data
     };
-    char* raw_content;                   // Raw bytes
+    char* raw_content;           // Raw bytes
 } SockMessage_t;
 
 /**
@@ -141,6 +137,11 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  * \retval  1 : on success
  */
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
+
+/*
+ * Correctly handle messages content deallocation.
+ */
+void freeMessageContent(SockMessage_t* msg);
 
 /**
  * Read EXACLTY N bytes from the filedescriptor 'fd'

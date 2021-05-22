@@ -10,5 +10,6 @@
 #include "uuid.h"
 #include "logger.h"
 #include "net.h"
+#include "murmurhash2.h"
 
 #endif // COMMON_H

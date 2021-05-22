@@ -1,5 +1,7 @@
 #include "huffman_encoding.h"
 
+#include "utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -200,7 +202,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
         clock_gettime(CLOCK_MONOTONIC, &end);
     
         // No, it is not.
-        result.data    = (BYTE*) calloc(dataSize + 1, sizeof(BYTE));
+        result.data    = (BYTE*) mem_calloc(dataSize + 1, sizeof(BYTE));
         result.data[0] = NOT_COMPRESSED_FLAG;
         memcpy(result.data + 1, data, dataSize * sizeof(BYTE));
         result.size    = dataSize + 1;
@@ -211,7 +213,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
 
     // 10. Create output buffer
     HuffBuffer_t out;
-    out.stream      = (BYTE*) calloc(compressedSize, sizeof(BYTE));
+    out.stream      = (BYTE*) mem_calloc(compressedSize, sizeof(BYTE));
     out.streamIndex = 0;
     out.byte        = 0x00;
     out.byteIndex   = 0;
@@ -310,7 +312,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     BYTE header1 = read_byte(&in);
     if (!(header1 & (COMPRESSED_FLAG))) {
         // Data is uncompressed
-        result.data = (BYTE*) calloc(dataSize - 1, sizeof(BYTE));
+        result.data = (BYTE*) mem_calloc(dataSize - 1, sizeof(BYTE));
         memcpy(result.data, data + 1, (dataSize - 1) * sizeof(BYTE));
         result.size = dataSize - 1;
         result.time = 0.0;
@@ -370,7 +372,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
 
     HuffBuffer_t out;
     out.streamIndex = 0;
-    out.stream      = (BYTE*) calloc(originalSize, sizeof(BYTE));
+    out.stream      = (BYTE*) mem_calloc(originalSize, sizeof(BYTE));
     out.byteIndex   = 0;
     out.byte        = 0x00;
 

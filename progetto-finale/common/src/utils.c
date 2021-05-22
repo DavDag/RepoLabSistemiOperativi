@@ -55,3 +55,47 @@ void* mem_realloc(void* ptr, size_t size) {
     // Otherwise returns ptr
     return newptr;
 }
+
+void lock_mutex(pthread_mutex_t* mutex) {
+    int res = 0;
+    if ((res = pthread_mutex_lock(mutex)) != 0) {
+        errno = res;
+        LOG_ERRNO("Server process crashed locking mutex");
+
+        // On error, function fails (some bigger problem occurred)
+        // source:
+        //   https://linux.die.net/man/3/pthread_mutex_lock
+        LOG_CRIT("Terminating server...");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void unlock_mutex(pthread_mutex_t* mutex) {
+    int res = 0;
+    if ((res = pthread_mutex_unlock(mutex)) != 0) {
+        errno = res;
+        LOG_ERRNO("Server process crashed unlocking mutex inside tryPush() call");
+
+        // On error, function fails (some bigger problem occurred)
+        // source:
+        //   https://linux.die.net/man/3/pthread_mutex_unlock
+        LOG_CRIT("Terminating server...");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void notify_one(pthread_cond_t* cond) {
+    int res = 0;
+    if ((res = pthread_cond_signal(cond)) != 0) {
+        errno = res;
+        LOG_ERRNO("Error sending signal");
+    }
+}
+
+void notify_all(pthread_cond_t* cond) {
+    int res = 0;
+    if ((res = pthread_cond_broadcast(cond)) != 0) {
+        errno = res;
+        LOG_ERRNO("Error sending signal");
+    }
+}

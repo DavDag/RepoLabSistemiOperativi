@@ -7,10 +7,13 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
 
 #ifdef LOG_TIMESTAMP
 #include <time.h>
 #endif
+
+#include "utils.h"
 
 #define LOG_LEVEL_CRITICAL 0
 #define LOG_LEVEL_PERROR   1
@@ -37,6 +40,8 @@
 #define LOG_ERRNO(...) LOG_PERR_INTO_STREAM(stderr, __VA_ARGS__)
 #define LOG_EMPTY(...) LOG_EMPTY_INTO_STREAM(stdout, __VA_ARGS__)
 
+static pthread_mutex_t gLogMutex = PTHREAD_MUTEX_INITIALIZER;
+
 void set_log_level(int new_level);
 int get_log_level();
 
@@ -56,6 +61,8 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
     
     // Filter based on loglevel
     if (get_log_level() < loglevel || (loglevel < LOG_LEVEL_CRITICAL || loglevel > LOG_LEVEL_VERBOSE)) return;
+
+    lock_mutex(&gLogMutex);
 
     // Add logging infos
     fprintf(stream, "%s[%s] ", COLOR[loglevel], DESCR[loglevel]);
@@ -81,6 +88,8 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
 
     // Add newline, reset color
     fprintf(stream, "%s\n", COLOR[6]);
+
+    unlock_mutex(&gLogMutex);
 }
 
 #endif // LOGGER_H

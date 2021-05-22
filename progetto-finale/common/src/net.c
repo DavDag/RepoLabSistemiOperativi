@@ -12,19 +12,22 @@
  * Write 'size' bytes from data into buffer.
  * Increments buf by size.
  */
-void writeToBuffer(void* data, char** buf, size_t size);
+void writeToBuffer(char** buf, void* data, size_t size);
 
 /**
  * Read 'size' bytes from buffer into data.
  * Increments buf by size.
  */
-void readFromBuffer(void* data, char** buf, size_t size);
+void readFromBuffer(char** buf, void* data, size_t size);
 
 // Converts content of 'data' from integer to char*
 void convertOffsetToPtr(char* begin, MsgPtr_t* data);
 
 // Converts content of 'data' from char* to integer
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
+
+// Estimate raw content size
+int calcMsgRawContentOffset(SockMessage_t* msg);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
@@ -33,7 +36,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
     int res = -1;
     char* buffer = bbegin;
 
-    // 1. Read size
+    // 1. Read size from socket
     int msgSize = 0;
     if ((res = readN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
@@ -42,7 +45,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         return -1;
     }
 
-    // 2. Read socket (into temp buffer)
+    // 2. Read from socket (into temp buffer)
     memset(buffer, 0, msgSize * sizeof(char));
     if ((res = readN(socketfd, buffer, sizeof(char) * msgSize)) != 1)
         return res;
@@ -50,16 +53,20 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
     // 3. Read message (from temp buffer)
     
     // UID
-    readFromBuffer(&msg->uid, &buffer, sizeof(UUID_t));
+    readFromBuffer(&buffer, &msg->uid, sizeof(UUID_t));
 
     // Type
-    readFromBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
+    readFromBuffer(&buffer, &msg->type, sizeof(SockMessageType_t));
     
     // Body
     switch (msg->type)
     {
         case MSG_REQ_OPEN_SESSION:
         case MSG_REQ_CLOSE_SESSION:
+        {
+            break;
+        }
+
         case MSG_REQ_OPEN_FILE:
         case MSG_REQ_CLOSE_FILE:
         case MSG_REQ_READ_FILE:
@@ -70,49 +77,55 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
-            // TODO:
+            // Flags
+            readFromBuffer(&buffer, &msg->request.flags, sizeof(int));
+
+            // File
+            MsgFile_t file;
+            readFromBuffer(&buffer, &file.filename.len  , sizeof(int));
+            readFromBuffer(&buffer, &file.filename.abs.i, sizeof(int));
+            readFromBuffer(&buffer, &file.filename.rel.i, sizeof(int));
+            readFromBuffer(&buffer, &file.contentLen    , sizeof(int));
+            readFromBuffer(&buffer, &file.content.i     , sizeof(int));
+            convertOffsetToPtr(bbegin, &file.filename.abs);
+            convertOffsetToPtr(bbegin, &file.filename.rel);
+            convertOffsetToPtr(bbegin, &file.content);
+            msg->request.file = file;
             break;
         }
 
         case MSG_RESP_SIMPLE:
         {
             // Status
-            readFromBuffer(&msg->response.status, &buffer, sizeof(RespStatus_t));
+            readFromBuffer(&buffer, &msg->response.status, sizeof(RespStatus_t));
             break;
         }
 
         case MSG_RESP_WITH_FILES:
         {
             // Status
-            readFromBuffer(&msg->response.status, &buffer, sizeof(RespStatus_t));
+            readFromBuffer(&buffer, &msg->response.status, sizeof(RespStatus_t));
 
-            // Num files attached
-            readFromBuffer(&msg->response.numFiles, &buffer, sizeof(int));
+            // Num files
+            readFromBuffer(&buffer, &msg->response.numFiles, sizeof(int));
 
-            /* TODO:
-            // ============ Filename ============
-            ResourcePath_t* filename = &msg->response.filename;
-
-            // Length
-            readFromBuffer(&filename->len, &buffer, sizeof(int));
-
-            // Absolute path name 'ptr'
-            readFromBuffer(&filename->abs.i, &buffer, sizeof(int));
-            convertOffsetToPtr(bbegin, &filename->abs);
-
-            // Relative path name 'ptr'
-            readFromBuffer(&filename->rel.i, &buffer, sizeof(int));
-            convertOffsetToPtr(bbegin, &filename->rel);
-
-            // ============ Content ============
-            // Length
-            readFromBuffer(&msg->response.contentLen, &buffer, sizeof(int));
-
-            // Data 'ptr'
-            readFromBuffer(&msg->response.content, &buffer, sizeof(int));
-            convertOffsetToPtr(bbegin, &msg->response.content);
-            */
-
+            // Files
+            const int numFiles = msg->response.numFiles;
+            MsgFile_t* files = NULL;
+            if (numFiles > 0) {
+                files = (MsgFile_t*) mem_calloc(numFiles, sizeof(MsgFile_t));
+                for (int i = 0; i < numFiles; ++i) {
+                    readFromBuffer(&buffer, &files[i].filename.len  , sizeof(int));
+                    readFromBuffer(&buffer, &files[i].filename.abs.i, sizeof(int));
+                    readFromBuffer(&buffer, &files[i].filename.rel.i, sizeof(int));
+                    readFromBuffer(&buffer, &files[i].contentLen    , sizeof(int));
+                    readFromBuffer(&buffer, &files[i].content.i     , sizeof(int));
+                    convertOffsetToPtr(bbegin, &files[i].filename.abs);
+                    convertOffsetToPtr(bbegin, &files[i].filename.rel);
+                    convertOffsetToPtr(bbegin, &files[i].content);
+                }
+            }
+            msg->response.files = files;
             break;
         }
 
@@ -120,6 +133,16 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
             break;
     }
 
+    // Raw content
+    int rawBytes = msgSize - calcMsgRawContentOffset(msg);
+    msg->raw_content = NULL;
+    if (rawBytes) {
+        // Read raw content
+        msg->raw_content = (char*) mem_calloc(rawBytes, sizeof(char));
+        readFromBuffer(&buffer, msg->raw_content, rawBytes * sizeof(char));
+    }
+
+    // Returns success
     return 1;
 }
 
@@ -127,12 +150,26 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
     errno = 0;
     int res = -1;
     char* buffer = bbegin;
+    char* brawbuffer = bbegin + calcMsgRawContentOffset(msg);
+    char* rawbuffer = brawbuffer;
 
-    // 1. Process message
+    // 1. Write message into buffer
+
+    // UUID
+    writeToBuffer(&buffer, &msg->uid, sizeof(UUID_t));
+
+    // Type
+    writeToBuffer(&buffer, &msg->type, sizeof(SockMessageType_t));
+
+    // Body
     switch (msg->type)
     {
         case MSG_REQ_OPEN_SESSION:
         case MSG_REQ_CLOSE_SESSION:
+        {
+            break;
+        }
+
         case MSG_REQ_OPEN_FILE:
         case MSG_REQ_CLOSE_FILE:
         case MSG_REQ_READ_FILE:
@@ -143,19 +180,54 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
-            // TODO:
+            // Flags
+            writeToBuffer(&buffer, &msg->request.flags, sizeof(int));
+
+            // File
+            MsgFile_t file = msg->request.file;
+            convertOffsetToPtr(brawbuffer, &file.filename.abs);
+            convertOffsetToPtr(brawbuffer, &file.filename.rel);
+            convertOffsetToPtr(brawbuffer, &file.content);
+            writeToBuffer(&buffer, &file.filename.len  , sizeof(int)); // Filename length
+            writeToBuffer(&buffer, &file.filename.abs.i, sizeof(int)); // Filename ptr offset of abs path
+            writeToBuffer(&buffer, &file.filename.rel.i, sizeof(int)); // Filename ptr offset of rel path
+            writeToBuffer(&buffer, &file.contentLen    , sizeof(int)); // Content length
+            writeToBuffer(&buffer, &file.content.i     , sizeof(int)); // Content ptr offset
+            writeToBuffer(&rawbuffer, &file.filename.abs, file.filename.len * sizeof(char)); // Filename path
+            writeToBuffer(&rawbuffer, &file.content, file.contentLen * sizeof(char));        // Content
             break;
         }
 
         case MSG_RESP_SIMPLE:
         {
-            // TODO:
+            // Status
+            writeToBuffer(&buffer, &msg->response.status, sizeof(RespStatus_t));
             break;
         }
 
         case MSG_RESP_WITH_FILES:
         {
-            // TODO:
+            // Status
+            writeToBuffer(&buffer, &msg->response.status, sizeof(RespStatus_t));
+
+            // Num files
+            writeToBuffer(&buffer, &msg->response.numFiles, sizeof(int));
+
+            // Files
+            const int numFiles = msg->response.numFiles;
+            MsgFile_t* files = msg->response.files;
+            for (int i = 0; i < numFiles; ++i) {
+                convertOffsetToPtr(brawbuffer, &files[i].filename.abs);
+                convertOffsetToPtr(brawbuffer, &files[i].filename.rel);
+                convertOffsetToPtr(brawbuffer, &files[i].content);
+                writeToBuffer(&buffer, &files[i].filename.len  , sizeof(int)); // Filename length
+                writeToBuffer(&buffer, &files[i].filename.abs.i, sizeof(int)); // Filename ptr offset of abs path
+                writeToBuffer(&buffer, &files[i].filename.rel.i, sizeof(int)); // Filename ptr offset of rel path
+                writeToBuffer(&buffer, &files[i].contentLen    , sizeof(int)); // Content length
+                writeToBuffer(&buffer, &files[i].content.i     , sizeof(int)); // Content ptr offset
+                writeToBuffer(&rawbuffer, &files[i].filename.abs, files[i].filename.len * sizeof(char)); // Filename path
+                writeToBuffer(&rawbuffer, &files[i].content, files[i].contentLen * sizeof(char));        // Content
+            }
             break;
         }
 
@@ -163,18 +235,29 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
             break;
     }
 
-    // 2. Write message (into tmp buffer)
-    writeToBuffer(&msg->uid, &buffer, sizeof(UUID_t));
-    writeToBuffer(&msg->type, &buffer, sizeof(SockeMessageType_t));
+    // 2. DOUBLE CHECK for msg malformation
+    if (buffer > brawbuffer) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (buffer > (bbegin + bufferSize) || rawbuffer > (bbegin + bufferSize)) {
+        errno = ENOMEM;
+        return -1;
+    }
 
-    // 3. Write buffer (into socket)
+    // 2. Write buffer (into socket)
     int msgSize = buffer - bbegin;
     if ((res = writeN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
     if ((res = writeN(socketfd, bbegin, msgSize * sizeof(char))) != 1)
         return res;
 
+    // Returns success
     return 1;
+}
+
+void freeMessageContent(SockMessage_t* msg) {
+    // TODO:
 }
 
 // ======================================= DEFINITIONS: Inner functions =============================================
@@ -237,13 +320,13 @@ int writeN(int fd, char* buf, size_t size) {
     return 1;
 }
 
-void writeToBuffer(void* data, char** buf, size_t size) {
+void writeToBuffer(char** buf, void* data, size_t size) {
     // buffer <= data
     memcpy(*buf, data, size);
     *buf += size;
 }
 
-void readFromBuffer(void* data, char** buf, size_t size) {
+void readFromBuffer(char** buf, void* data, size_t size) {
     // buffer => data
     memcpy(data, *buf, size);
     *buf += size;
@@ -255,4 +338,58 @@ void convertOffsetToPtr(char* begin, MsgPtr_t* data) {
 
 void convertPtrToOffset(char* begin, MsgPtr_t* data) {
     data->i = data->ptr - begin; 
+}
+
+int calcMsgRawContentOffset(SockMessage_t* msg) {
+    int offset = sizeof(UUID_t) + sizeof(SockMessageType_t);
+    switch (msg->type)
+    {
+        case MSG_REQ_OPEN_SESSION:
+        case MSG_REQ_CLOSE_SESSION:
+        {
+            break;
+        }
+
+        case MSG_REQ_OPEN_FILE:
+        case MSG_REQ_CLOSE_FILE:
+        case MSG_REQ_READ_FILE:
+        case MSG_REQ_LOCK_FILE:
+        case MSG_REQ_UNLOCK_FILE:
+        case MSG_REQ_REMOVE_FILE:
+        case MSG_REQ_READ_N_FILES:
+        case MSG_REQ_WRITE_FILE:
+        case MSG_REQ_APPEND_TO_FILE:
+        {
+            // Flags
+            offset += sizeof(int);
+
+            // File
+            offset += 5 * sizeof(int);
+            break;
+        }
+
+        case MSG_RESP_SIMPLE:
+        {
+            // Status
+            offset += sizeof(RespStatus_t);
+            break;
+        }
+
+        case MSG_RESP_WITH_FILES:
+        {
+            // Status
+            offset += sizeof(RespStatus_t);
+
+            // Num files
+            offset += sizeof(int);
+
+            // Files
+            offset += 5 * msg->response.numFiles * sizeof(int);
+            break;
+        }
+
+        default:
+            break;
+    }
+    return offset;
 }

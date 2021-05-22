@@ -2,7 +2,7 @@
 #include "client.h"
 
 int main(int argc, char** argv) {
-    set_log_level(LOG_LEVEL_INFO);
+    set_log_level(LOG_LEVEL_VERBOSE);
 
     // Do-While just for better error handling
     do {

@@ -13,9 +13,12 @@
 #include <common.h>
 
 #include "server.h"
+#include "circ_queue.h"
 
 #define PIPE_READ_END  0
 #define PIPE_WRITE_END 1
+
+#define RING_BUFFER_SIZE 16
 
 #define EXIT_REQUESTED 1000 // Message sent from main thread to select thread to request to stop reading
 #define NEW_CONNECTION 1001 // Message sent from main thread to select thread to notify client connection
@@ -25,6 +28,9 @@
 // Syntactic sugar
 typedef struct sigaction SigAction_t;
 typedef struct sockaddr_un SocketAddress_t;
+
+typedef struct { int id; } WorkerThreadArgs_t;
+typedef struct { int fd; SockMessage_t msg; } WorkEntry_t;
 
 // ======================================== DECLARATIONS: Inner functions ===========================================
 
@@ -43,11 +49,17 @@ volatile sig_atomic_t gSigIntReceived  = 0;
 volatile sig_atomic_t gSigQuitReceived = 0;
 volatile sig_atomic_t gSigHupReceived  = 0;
 
-static pthread_t* gWorkerThreads = NULL, gSelectThread;
-static size_t gWorkerThreadsSize = 0;
+static WorkerThreadArgs_t* gWorkerArgs = NULL;
+static pthread_t* gWorkerThreads       = NULL;
+static pthread_t gSelectThread;
 static ServerConfig_t gConfigs;
 static fd_set gFdSet;
-static int gMaxFd = -1, gSocketFd = -1, mainToSelectPipe[2];
+static int gMaxFd                      = -1;
+static int gSocketFd                   = -1;
+static int mainToSelectPipe[2]         = { -1, -1 };
+static CircQueue_t* gMsgQueue          = NULL;
+static pthread_mutex_t gCondMutex      = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t gQueueCond       = PTHREAD_COND_INITIALIZER;
 
 // ======================================= DEFINITIONS: client.h functions ==========================================
 
@@ -66,6 +78,9 @@ int initializeServer(ServerConfig_t configs) {
     // Socket and global state
     gConfigs = configs;
     if (setupSocket() != RES_OK) return RES_ERROR;
+
+    // Msg queue
+    gMsgQueue = createQueue(RING_BUFFER_SIZE);
 
     // Pipe MainThread -> SelectThread
     if (pipe(mainToSelectPipe) < 0) {
@@ -133,19 +148,31 @@ int runServer() {
 int terminateSever() {
     LOG_VERB("Terminating server ...");
     
-    // Wait all threads
-    
-    // Select thread
+    // Wait select thread
     LOG_VERB("Waiting select thread...");
     if (pthread_join(gSelectThread, NULL) < 0)
         LOG_ERRNO("Error joining select thread");
+
+    // Broadcast signal
+    lock_mutex(&gCondMutex);
+    notify_all(&gQueueCond);
+    unlock_mutex(&gCondMutex);
     
-    // Worker threads
+    // Wait worker threads
     LOG_VERB("Waiting worker threads...");
-    for (int i = 0; i < gWorkerThreadsSize; ++i)
+    for (int i = 0; i < gConfigs.numWorkers; ++i)
         if (pthread_join(gWorkerThreads[i], NULL) < 0)
         LOG_ERRNO("Error joining worker thread #%d", i + 1);
     free(gWorkerThreads);
+    free(gWorkerArgs);
+
+    // Free remaining items inside queue (if any)
+    CircQueueItemPtr_t item;
+    while (tryPop(gMsgQueue, &item) == 1) {
+        freeMessageContent(&((WorkEntry_t*) item)->msg);
+    }
+    free(gMsgQueue->data);
+    free(gMsgQueue);
 
     // Returns success
     return RES_OK;
@@ -233,8 +260,62 @@ void cleanup() {
 }
 
 void* workerThreadFun(void* args) {
-    // TODO:
+    // vars
+    char _inn_buffer[4096];
+    const int threadID = ((WorkerThreadArgs_t*) args)->id;
+    int res = 0;
 
+    // Stop working when SIGINT / SIGQUIT received and on SIGHUP when queue is empty
+    int hasFoundItem = 0;
+    while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && hasFoundItem)) {
+        // Reset item
+        CircQueueItemPtr_t item = NULL;
+        SockMessage_t msg;
+        int clientFd = -1;
+
+        // Lock mutex and wait on cond (if queue is empty)
+        lock_mutex(&gCondMutex);
+        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gMsgQueue, &item)) == 0) {
+            LOG_VERB("[#%2d] waiting for work...", threadID);
+            // Wait for cond
+            if ((res = pthread_cond_wait(&gQueueCond, &gCondMutex)) != 0) {
+                errno = res;
+                LOG_ERRNO("[#%2d] Error waiting on cond var inside worker func", threadID);
+            }
+        }
+        unlock_mutex(&gCondMutex);
+
+        // Has exited from above loop so item should contains a message
+        // Double check to ensure correct behaviour
+        if (item == NULL) {
+            LOG_VERB("[#%2d] Queue empty", threadID);
+            continue;
+        }
+
+        clientFd = ((WorkEntry_t*) (item))->fd;
+        msg      = ((WorkEntry_t*) (item))->msg;
+
+        // Message read
+        LOG_VERB("[#%2d] work received", threadID);
+
+        // Handle message
+        // TODO:
+        LOG_VERB("[#%2d] MSG-UUID %s", threadID, UUID_to_String(msg.uid));
+
+        freeMessageContent(&msg);
+
+        // Write response
+        msg = (SockMessage_t) {
+            .uid  = UUID_new(),
+            .type = MSG_RESP_SIMPLE,
+            .response = {
+                .status = RESP_STATUS_OK
+            }
+        };
+        if (writeMessage(clientFd, _inn_buffer, 4096, &msg) == -1)
+            LOG_ERRNO("Error sending response");
+    }
+    
     return NULL;
 }
 
@@ -242,6 +323,8 @@ void* selectThreadFun(void* args) {
     // TODO: Update adding a config
     char _inn_buffer[4096];
     SockMessage_t msg;
+    int bufferIndex = 0;
+    WorkEntry_t works[RING_BUFFER_SIZE];
 
     // Run until signal is received
     fd_set fds_cpy;
@@ -315,8 +398,21 @@ void* selectThreadFun(void* args) {
                     newMaxFd = (fd == 0) ? 0 : (fd - 1); // Remove this descriptor from max calculation
                     LOG_VERB("Client on FD#%02d disconnected !", fd);
                 } else {
-                    // TODO: Message received !
-                    LOG_INFO("New message: uuid: %s, type: %d", UUID_to_String(msg.uid), msg.type);
+                    // Message received !
+                    LOG_VERB("Message received from FD#%0d", fd);
+                    // try push message into queue
+                    WorkEntry_t* work = &works[bufferIndex];
+                    work->fd = fd;
+                    work->msg = msg;
+                    if (tryPush(gMsgQueue, work) == 0)
+                        LOG_WARN("Msg queue is full. Consider upgrading its capacity. (curr = %d)", gMsgQueue->capacity);
+                    else {
+                        bufferIndex = (bufferIndex + 1) % RING_BUFFER_SIZE;                        
+                    }
+                    // Signal item added to queue
+                    lock_mutex(&gCondMutex);
+                    notify_one(&gQueueCond);
+                    unlock_mutex(&gCondMutex);
                 }
             }
         }
@@ -327,10 +423,11 @@ void* selectThreadFun(void* args) {
 }
 
 int spawnWorkers() {
-    gWorkerThreadsSize = gConfigs.maxClients;
-    gWorkerThreads = (pthread_t*) mem_malloc(sizeof(pthread_t) * gWorkerThreadsSize);
-    for (int i = 0; i < gWorkerThreadsSize; ++i) {
-        if (pthread_create(&gWorkerThreads[i], NULL, workerThreadFun, NULL) < 0) {
+    gWorkerArgs    = (WorkerThreadArgs_t*) mem_malloc(gConfigs.numWorkers * sizeof(WorkerThreadArgs_t));
+    gWorkerThreads = (pthread_t*) mem_malloc(gConfigs.numWorkers * sizeof(pthread_t));
+    for (int i = 0; i < gConfigs.numWorkers; ++i) {
+        gWorkerArgs[i].id = i;
+        if (pthread_create(&gWorkerThreads[i], NULL, workerThreadFun, &gWorkerArgs[i]) < 0) {
             LOG_ERRNO("Creating worker thread");
             LOG_CRIT("Unable to start worker thread #%d", i + 1);
             return RES_ERROR;
