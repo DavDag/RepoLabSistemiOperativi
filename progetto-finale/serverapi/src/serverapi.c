@@ -61,14 +61,14 @@ int closeConnection(const char* sockname) {
 }
 
 int openFile(const char* pathname, int flags) {
-    int filenameLen = strlen(pathname);
+    int filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'OPEN_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
         .type = MSG_REQ_OPEN_FILE,
         .request = {
-            .flags = FLAG_LOCK,
+            .flags = flags,
             .file = {
                 .filename = {
                     .len = filenameLen,

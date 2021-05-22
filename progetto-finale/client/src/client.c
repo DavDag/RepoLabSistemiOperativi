@@ -385,11 +385,14 @@ int handleOption(int index) {
         
         case OPT_WAIT:
         {
-            usleep(option.val);
+            struct timespec timeToWait = { .tv_sec = (option.val) / 1000, .tv_nsec = (option.val % 1000) * 1000 };
+            struct timespec timeRemaining;
+            if (nanosleep(&timeToWait, &timeRemaining) < 0)
+                LOG_ERRNO("Error sleeping");
             
             // Log operation data
             if (gIsExtendedLogEnabled)
-                LOG_INFO("{-t} Waited %dms", option.val);
+                LOG_INFO("{-t} Waited for %ld s and %ld ns", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec));
 
             LOG_VERB("Process resumed");
             break;
