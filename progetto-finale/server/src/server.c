@@ -522,6 +522,8 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 if ((res = fs_insert(client, fs_file, isLockRequested, &outFiles, &outFilesCount)) != 0) {
                     LOG_ERRO("[#%.2d] Error creating file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
+                    if (fs_file.content) free((char*) fs_file.content);
+                    if (fs_file.name)    free((char*) fs_file.name);
                     break;
                 }
             } else if(isLockRequested) {
@@ -654,8 +656,8 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                     }
                     // Add file to response
                     // TODO:
-                    free((char*) outFile.content);
-                    free((char*) outFile.name);
+                    if (outFile.content) free((char*) outFile.content);
+                    if (outFile.name)    free((char*) outFile.name);
                     break;
                 }
 

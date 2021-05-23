@@ -71,8 +71,8 @@ int terminateFileSystem() {
     FSCacheEntry_t* item = gCache.head;
     while (item != NULL && depth < 1024) {
         FSCacheEntry_t* tmp = item->pre;
-        free((char*) item->file.name);
-        free((char*) item->file.content);
+        if (item->file.content) free((char*) item->file.content);
+        if (item->file.name)    free((char*) item->file.name);
         free(item);
         item = tmp;
         depth++;
@@ -144,6 +144,9 @@ int fs_remove(ClientID client, FSFile_t file) {
         if (entry->owner != client) {
             res = FS_CLIENT_NOT_ALLOWED;
         } else {
+            // Update hashmap
+            setValueForKey(key, NULL);
+
             // Link pre and nex toghether
             FSCacheEntry_t* tmp1 = entry->pre;
             FSCacheEntry_t* tmp2 = entry->nex;
@@ -155,8 +158,8 @@ int fs_remove(ClientID client, FSFile_t file) {
             if (gCache.tail == entry) gCache.tail = entry->nex;
 
             // Release memory
-            free((char*) entry->file.content);
-            free((char*) entry->file.name);
+            if (entry->file.content) free((char*) entry->file.content);
+            if (entry->file.name)    free((char*) entry->file.name);
             free(entry);
         }
     } else {
@@ -234,8 +237,8 @@ int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFiles
             // TODO: Add cache misses managment
 
             // Release memory
-            free((char*) entry->file.content);
-            free((char*) entry->file.name);
+            if (entry->file.content) free((char*) entry->file.content);
+            if (entry->file.name)    free((char*) entry->file.name);
 
             // Update file
             entry->file = file;
@@ -372,7 +375,7 @@ void log_cache_entirely(const char* const after) {
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
     while (item != NULL && depth < 1024) {
-        LOG_VERB("Ptr: %p. Owner: %.3d Name: '%16s'. Content: '%16s'. N: %p. P: %p", item, item->owner, item->file.name, item->file.content, item->nex, item->pre);
+        LOG_VERB("Ptr: %p. Owner: %+.3d Name: '%16s'. Content: '%16s'. N: %p. P: %p", item, item->owner, item->file.name, item->file.content, item->nex, item->pre);
         item = item->pre;
         depth++;
     }
