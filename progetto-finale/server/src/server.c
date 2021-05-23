@@ -45,7 +45,8 @@ void* workerThreadFun();
 int spawnThreadForSelect();
 void* selectThreadFun();
 SockMessage_t handleWork(int, ClientID, SockMessage_t);
-void handleSessionError(int, SockMessage_t*);
+void handleError(int, SockMessage_t*);
+FSFile_t createFSFileFromSessionFile(SessionFile_t file);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -447,9 +448,6 @@ int spawnThreadForSelect() {
 }
 
 SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t request) {
-    // Retrieve client session
-
-
     // Prepare response
     SockMessage_t response = {
         .uid  = UUID_new(),
@@ -460,7 +458,9 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
     };
 
     // Handle request
-    int res = 0;
+    int res            = 0; // tmp var to handle partial results
+    int outFilesCount  = 0; // store emitted files count
+    FSFile_t* outFiles = 0; // store emitted files
     switch (request.type)
     {
         case MSG_REQ_OPEN_SESSION:
@@ -468,12 +468,12 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
             // Create session
             if ((res = createSession(client)) != 0) {
                 LOG_ERRO("[#%.2d] Error creating session for client #%.2d", workingThreadID, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // LOG
-            LOG_VERB("[#%.2d] Intialized client session.", workingThreadID);
+            LOG_VERB("[#%.2d] Intialized session for client #%.2d", workingThreadID, client);
             break;
         }
 
@@ -482,85 +482,107 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
             // Destroy session
             if ((res = destroySession(client)) != 0) {
                 LOG_ERRO("[#%.2d] Error destroying session for client #%.2d", workingThreadID, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // LOG
-            LOG_VERB("[#%.2d] Terminated client session.", workingThreadID);
+            LOG_VERB("[#%.2d] Terminated session for client #%.2d", workingThreadID, client);
             break;
         }
 
         case MSG_REQ_OPEN_FILE:
         {
             // Retrieve session
-            ClientSessionID session;
+            SessionClientID session;
             if ((res = getSession(client, &session)) != 0) {
                 LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // Check file was not opened
-            const int flags = request.request.flags; // TODO:
-            FSFile_t file   = {
-                .name    = request.request.file.filename.abs.ptr,
-                .nameLen = request.request.file.filename.len,
+            const int flags    = request.request.flags;
+            SessionFile_t file = {
+                .name = request.request.file.filename.abs.ptr,
+                .len  = request.request.file.filename.len,
             };
             if ((res = hasOpenedFile(session, file)) != SESSION_FILE_NEVER_OPENED) {
                 LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // Open file
-            // TODO:
+            int isLockRequested = flags & FLAG_LOCK;
+            if (flags & FLAG_CREATE) {
+                // Create file
+                FSFile_t fs_file = createFSFileFromSessionFile(file);
+                if ((res = fs_insert(client, fs_file, &outFiles, &outFilesCount, isLockRequested)) != 0) {
+                    LOG_ERRO("[#%.2d] Error creating file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
+            } else if(isLockRequested) {
+                // Lock file
+                FSFile_t fs_file = createFSFileFromSessionFile(file);
+                if ((res = fs_trylock(client, fs_file)) != 0) {
+                    LOG_ERRO("[#%.2d] Error locking file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
+            } else {
+                // Nothing
+            }
 
-            // Communicate file opened
+            // Save file opened
             if ((res = addFileOpened(session, file)) != 0) {
                 LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // LOG
-            LOG_VERB("[#%.2d] File '%s' opened with flags %d.", workingThreadID, file.name, flags);
+            LOG_VERB("[#%.2d] File '%s' opened with flags %d for client #%.2d", workingThreadID, file.name, flags, client);
             break;
         }
 
         case MSG_REQ_CLOSE_FILE:
         {
             // Retrieve session
-            ClientSessionID session;
+            SessionClientID session;
             if ((res = getSession(client, &session)) != 0) {
                 LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // Check file was opened
-            FSFile_t file   = {
-                .name    = request.request.file.filename.abs.ptr,
-                .nameLen = request.request.file.filename.len,
+            SessionFile_t file = {
+                .name = request.request.file.filename.abs.ptr,
+                .len  = request.request.file.filename.len,
             };
             if ((res = hasOpenedFile(session, file)) != SESSION_FILE_ALREADY_OPENED) {
                 LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // Close file
-            // TODO:
+            // Try unlock file
+            FSFile_t fs_file = createFSFileFromSessionFile(file);
+            // Do not handle errors. Simply unlock the file if owned. Otherwise just do nothing.
+            fs_unlock(client, fs_file);
 
-            // Communicate file closed
+            // Save file closed
             if ((res = remFileOpened(session, file)) != 0) {
                 LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
-                handleSessionError(res, &response);
+                handleError(res, &response);
                 break;
             }
 
             // LOG
-            LOG_VERB("[#%.2d] File '%s' closed.", workingThreadID, file.name);
+            LOG_VERB("[#%.2d] File '%s' closed for client #%.2d", workingThreadID, file.name, client);
             break;
         }
 
@@ -569,17 +591,134 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
             // TODO:
             break;
         }
-        
+
+        case MSG_REQ_WRITE_FILE:
         case MSG_REQ_READ_FILE:
-        case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
-            // TODO:
+            // Retrieve session
+            SessionClientID session;
+            if ((res = getSession(client, &session)) != 0) {
+                LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
+                handleError(res, &response);
+                break;
+            }
+
+            SessionFile_t file = {
+                .name = request.request.file.filename.abs.ptr,
+                .len  = request.request.file.filename.len,
+            };
+            if (request.type == MSG_REQ_WRITE_FILE) {
+                // Ensure file was opened and can write into it
+                if ((res = canWriteIntoFile(session, file)) != 0) {
+                    LOG_ERRO("[#%.2d] Error writing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }                
+            } else {
+                // Check file was opened
+                if ((res = hasOpenedFile(session, file)) != SESSION_FILE_ALREADY_OPENED) {
+                    LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
+            }
+
+            // Apply request
+            switch (request.type)
+            {
+                case MSG_REQ_WRITE_FILE:
+                {
+                    // TODO:
+                    break;
+                }
+
+                case MSG_REQ_READ_FILE:
+                {
+                    // Read file
+                    FSFile_t outFile;
+                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    if ((res = fs_obtain(client, fs_file, &outFile)) != 0) {
+                        LOG_ERRO("[#%.2d] Error reading file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        break;
+                    }
+                    // Add file to response
+                    // TODO:
+                    break;
+                }
+
+                case MSG_REQ_LOCK_FILE:
+                {
+                    // Lock file
+                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    if ((res = fs_trylock(client, fs_file)) != 0) {
+                        // TODO:
+                        // 
+                        // if (res == FS_CLIENT_NOT_ALLOWED) pushIntoSideQueue()
+                        // 
+                        LOG_ERRO("[#%.2d] Error locking file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        break;
+                    }
+                    break;
+                }
+
+                case MSG_REQ_UNLOCK_FILE:
+                {
+                    // Unlock file
+                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    if ((res = fs_unlock(client, fs_file)) != 0) {
+                        LOG_ERRO("[#%.2d] Error unlocking file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        break;
+                    }
+                    break;
+                }
+
+                case MSG_REQ_REMOVE_FILE:
+                {
+                    // Remove file
+                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    if ((res = fs_remove(client, fs_file)) != 0) {
+                        LOG_ERRO("[#%.2d] Error removing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        break;
+                    }
+                    break;
+                }
+
+                case MSG_REQ_APPEND_TO_FILE:
+                {
+                    // TODO: 
+                    break;
+                }
+    
+                default:
+                    // Should never happend
+                    break;
+            }
+
+            if (request.type == MSG_REQ_REMOVE_FILE) {
+                // Save file closed
+                if ((res = remFileOpened(session, file)) != 0) {
+                    LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
+            } else {
+                // Save operation done
+                if ((res = addOperationDone(session, file)) != 0) {
+                    LOG_ERRO("[#%.2d] Error finishing operation %d on file '%s' for client #%.2d", workingThreadID, request.type, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
+            }
+
             // LOG
-            LOG_VERB("[#%.2d] Generic request received from client.", workingThreadID);
+            LOG_VERB("[#%.2d] Generic request (%d) handled from client #%.2d", workingThreadID, request.type, client);
             break;
         }
 
@@ -588,7 +727,8 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
         case MSG_RESP_WITH_FILES:
         default:
         {
-            LOG_WARN("[#%.2d] Invalid message type (%d) from client.", workingThreadID, request.type);
+            // LOG
+            LOG_WARN("[#%.2d] Invalid message type (%d) from client #%.2d", workingThreadID, request.type, client);
             response.response.status = RESP_STATUS_INVALID_ARG;
             break;
         }
@@ -598,10 +738,12 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
     return response;
 }
 
-void handleSessionError(int status, SockMessage_t* response) {
+void handleError(int status, SockMessage_t* response) {
     LOG_VERB("Handling status %d...", status);
     switch (status)
     {
+        case FS_FILE_ALREADY_EXISTS:
+        case FS_FILE_NOT_EXISTS:
         case SESSION_FILE_ALREADY_OPENED:
         {
             response->response.status = RESP_STATUS_INVALID_ARG;
@@ -620,6 +762,7 @@ void handleSessionError(int status, SockMessage_t* response) {
             break;
         }
 
+        case FS_CLIENT_NOT_ALLOWED:
         case SESSION_ALREADY_EXIST:
         case SESSION_NOT_EXIST:
         case SESSION_CANNOT_WRITE_FILE:
@@ -633,4 +776,15 @@ void handleSessionError(int status, SockMessage_t* response) {
             // Should never append
             break;
     }
+}
+
+FSFile_t createFSFileFromSessionFile(SessionFile_t file) {
+    FSFile_t fs_file = {
+        .content    = NULL,
+        .contentLen = 0,
+        .name       = (char*) mem_calloc(file.len, sizeof(char)),
+        .nameLen    = file.len,
+    };
+    memcpy(file.name, fs_file.name, file.len);
+    return fs_file;
 }

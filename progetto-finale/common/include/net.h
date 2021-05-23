@@ -8,6 +8,10 @@
 
 #define DEFAULT_SOCK_FILE "../cs_sock"
 
+#define FLAG_EMPTY  0x00 // Empty
+#define FLAG_CREATE 0x01 // Request creation
+#define FLAG_LOCK   0x02 // Request lock
+
 /**
  * To be able to send ptr's via socket, they needs to be converted
  * to offsets relative to message's begin.

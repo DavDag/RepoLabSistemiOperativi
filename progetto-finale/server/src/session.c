@@ -46,7 +46,7 @@ int createSession(ClientID client) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int getSession(ClientID client, ClientSessionID* session) {
+int getSession(ClientID client, SessionClientID* session) {
     // Check if client already has a session
     ClientSession_t* _inn_session = &gSessionTable[client];
     if (!_inn_session->isValid)
@@ -73,14 +73,14 @@ int destroySession(ClientID client) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int hasOpenedFile(ClientSessionID session, FSFile_t file) {
+int hasOpenedFile(SessionClientID session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
         return SESSION_NOT_EXIST;
 
     // Search for file
-    HashValue key = hash_string(file.name, file.nameLen);
+    HashValue key = hash_string(file.name, file.len);
     for (int i = 0; i < _inn_session->numFileOpened; ++i)
         if (_inn_session->filenames[i] == key)
             return __int_ret_updating_ses(_inn_session, SESSION_FILE_ALREADY_OPENED);
@@ -89,7 +89,7 @@ int hasOpenedFile(ClientSessionID session, FSFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int addFileOpened(ClientSessionID session, FSFile_t file) {
+int addFileOpened(SessionClientID session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
@@ -105,7 +105,7 @@ int addFileOpened(ClientSessionID session, FSFile_t file) {
         return __int_ret_updating_ses(_inn_session, SESSION_OUT_OF_MEMORY);
     
     // Add file
-    HashValue key   = hash_string(file.name, file.nameLen);
+    HashValue key   = hash_string(file.name, file.len);
     const int index = _inn_session->numFileOpened;
     _inn_session->filenames[index]     = key;
     _inn_session->numOperations[index] = 1;
@@ -115,14 +115,14 @@ int addFileOpened(ClientSessionID session, FSFile_t file) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int remFileOpened(ClientSessionID session, FSFile_t file) {
+int remFileOpened(SessionClientID session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
         return SESSION_NOT_EXIST;
     
     // Rem file
-    HashValue key = hash_string(file.name, file.nameLen);
+    HashValue key = hash_string(file.name, file.len);
     for (int i = 0; i < _inn_session->numFileOpened; ++i) {
         // Search for file
         if (_inn_session->filenames[i] == key) {
@@ -144,14 +144,14 @@ int remFileOpened(ClientSessionID session, FSFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int canWriteIntoFile(ClientSessionID session, FSFile_t file) {
+int canWriteIntoFile(SessionClientID session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
         return SESSION_NOT_EXIST;
     
     // Ensure file was opened RIGHT before
-    HashValue key = hash_string(file.name, file.nameLen);
+    HashValue key = hash_string(file.name, file.len);
     for (int i = 0; i < _inn_session->numFileOpened; ++i)
         if (_inn_session->filenames[i] == key)
             return __int_ret_updating_ses(_inn_session, 
@@ -162,14 +162,14 @@ int canWriteIntoFile(ClientSessionID session, FSFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int addOperationDone(ClientSessionID session, FSFile_t file) {
+int addOperationDone(SessionClientID session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
         return SESSION_NOT_EXIST;
     
     // Increment operations
-    HashValue key = hash_string(file.name, file.nameLen);
+    HashValue key = hash_string(file.name, file.len);
     for (int i = 0; i < _inn_session->numFileOpened; ++i)
         if (_inn_session->filenames[i] == key) {
             _inn_session->numOperations[i]++;

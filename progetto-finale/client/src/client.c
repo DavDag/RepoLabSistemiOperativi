@@ -615,10 +615,7 @@ int handleOption(int index) {
                     if ((status = removeFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error removing file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_FAILURE) {
-                        LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_FAILURE;
-                    }
+                    // close is not required
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }

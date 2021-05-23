@@ -10,10 +10,6 @@
 #define SERVER_API_SUCCESS  0 // On Success
 #define SERVER_API_FAILURE -1 // On Failure
 
-#define FLAG_EMPTY  0x00 // Empty
-#define FLAG_CREATE 0x01 // Request creation
-#define FLAG_LOCK   0x02 // Request lock
-
 /**
  * Viene aperta una connessione AF_UNIX al socket file sockname. Se il
  * server non accetta immediatamente la richiesta di connessione, la

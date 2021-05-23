@@ -3,6 +3,10 @@
 #ifndef FILE_SYSTEM_H
 #define FILE_SYSTEM_H
 
+#define FS_FILE_ALREADY_EXISTS 101
+#define FS_FILE_NOT_EXISTS     102
+#define FS_CLIENT_NOT_ALLOWED  103
+
 // Syntactic sugar
 typedef int ClientID;
 
@@ -25,8 +29,9 @@ typedef struct {
  * Initialize the "file_system".
  * MUST BE called ONCE before any other call.
  * 
- * \retval > 0: on error (error code is returned) 
- * \retval   0: on success
+ * \param configs: Configs parameters
+ * 
+ * \retval 0: on success
  */
 int initializeFileSystem(FSConfig_t configs);
 
@@ -34,63 +39,81 @@ int initializeFileSystem(FSConfig_t configs);
  * Terminate the "file_system".
  * MUST BE called ONCE after any other call.
  * 
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * \retval 0: on success
  */
 int terminateFileSystem();
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Insert a file inside the filesystem.
+ * If aquireLock is set, during the creation it also aquire lock on it.
+ * 
+ * \param client       : client requesting the action
+ * \param file         : destination file
+ * \param acquireLock  : should it acquire lock too ?
+ * \param outFiles     : ejected files to make room to the inserted file
+ * \param outFilesCount: ejected files count
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_FILE_ALREADY_EXISTS ]
  */
-int openFile(ClientID client, FSFile_t file, int mode);
+int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFiles, int* outFilesCount);
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Remove a file from the filesystem.
+ * 
+ * \param client: client requesting the action
+ * \param file  : file to remove
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int closeFile(ClientID client, FSFile_t file);
+int fs_remove(ClientID client, FSFile_t file);
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Retrieve a file from the filesystem.
+ * 
+ * \param client : client requesting the action
+ * \param file   : file to retrieve
+ * \param outFile: retrieved file
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_FILE_NOT_EXISTS ]
  */
-int readFile(ClientID client, FSFile_t* file);
+int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Modify a file from the filesystem.
+ * 
+ * \param client       : client requesting the action
+ * \param file         : file to update (with its new content inside)
+ * \param outFiles     : ejected files to make room to the inserted file
+ * \param outFilesCount: ejected files count
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int readNFiles(ClientID client, FSFile_t* files, int fileCount);
+int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Try taking ownership of the file.
+ * 
+ * \param client: client requesting the action
+ * \param file  : file to 'lock'
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int writeFile(ClientID client, FSFile_t file);
+int fs_trylock(ClientID client, FSFile_t file);
 
 /**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
+ * Release ownership of the file.
+ * 
+ * \param client: client requesting the action
+ * \param file  : file to 'unlock'
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int appendToFile(ClientID client, FSFile_t file);
-
-/**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
- */
-int lockFile(ClientID client, FSFile_t file);
-
-/**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
- */
-int unlockFile(ClientID client, FSFile_t file);
-
-/**
- * \retval > 0: on error (error code is returned)
- * \retval   0: on success
- */
-int removeFile(ClientID client, FSFile_t file);
+int fs_unlock(ClientID client, FSFile_t file);
 
 #endif // FILE_SYSTEM_H

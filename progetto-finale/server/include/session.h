@@ -10,14 +10,15 @@
 #define MAX_CLIENT_OPENED_FILES 16
 #define MAX_CLIENT_COUNT 4096
 
-#define SESSION_ALREADY_EXIST       1
-#define SESSION_NOT_EXIST           2
-#define SESSION_FILE_ALREADY_OPENED 3
-#define SESSION_FILE_NEVER_OPENED   4
-#define SESSION_OUT_OF_MEMORY       5
-#define SESSION_CANNOT_WRITE_FILE   6
+#define SESSION_ALREADY_EXIST       201
+#define SESSION_NOT_EXIST           202
+#define SESSION_FILE_ALREADY_OPENED 203
+#define SESSION_FILE_NEVER_OPENED   204
+#define SESSION_OUT_OF_MEMORY       205
+#define SESSION_CANNOT_WRITE_FILE   206
 
-typedef int ClientSessionID;
+typedef int SessionClientID;
+typedef struct { const char* name; int len; } SessionFile_t;
 
 /**
  * Create new session for client.
@@ -38,7 +39,7 @@ int createSession(ClientID client);
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST ]
  */
-int getSession(ClientID client, ClientSessionID* session);
+int getSession(ClientID client, SessionClientID* session);
 
 /**
  * Destroy session.
@@ -60,7 +61,7 @@ int destroySession(ClientID client);
  * \retval SESSION_FILE_NEVER_OPENED  : when file is not opened in current session
  * \retval SESSION_NOT_EXIST          : on error
  */
-int hasOpenedFile(ClientSessionID session, FSFile_t file);
+int hasOpenedFile(SessionClientID session, SessionFile_t file);
 
 /**
  * Add file inside opened list for session.
@@ -71,7 +72,7 @@ int hasOpenedFile(ClientSessionID session, FSFile_t file);
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_ALREADY_OPENED, SESSION_OUT_OF_MEMORY ]
  */
-int addFileOpened(ClientSessionID session, FSFile_t file);
+int addFileOpened(SessionClientID session, SessionFile_t file);
 
 /**
  * Remove file from opened list for session.
@@ -82,7 +83,7 @@ int addFileOpened(ClientSessionID session, FSFile_t file);
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED ]
  */
-int remFileOpened(ClientSessionID session, FSFile_t file);
+int remFileOpened(SessionClientID session, SessionFile_t file);
 
 /**
  * Test if can write into file.
@@ -93,7 +94,7 @@ int remFileOpened(ClientSessionID session, FSFile_t file);
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED, SESSION_CANNOT_WRITE_FILE ]
  */
-int canWriteIntoFile(ClientSessionID session, FSFile_t file);
+int canWriteIntoFile(SessionClientID session, SessionFile_t file);
 
 /**
  * Notify operation done on file.
@@ -104,6 +105,6 @@ int canWriteIntoFile(ClientSessionID session, FSFile_t file);
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED ]
  */
-int addOperationDone(ClientSessionID session, FSFile_t file);
+int addOperationDone(SessionClientID session, SessionFile_t file);
 
 #endif // SESSION_H
