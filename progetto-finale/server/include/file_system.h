@@ -95,6 +95,17 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
 int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
 /**
+ * Check if file exist inside the filesystem.
+ * 
+ * \param client: client requesting the action
+ * \param file  : file to check
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_FILE_NOT_EXISTS ]
+ */
+int fs_exists(ClientID client, FSFile_t file);
+
+/**
  * Try taking ownership of the file.
  * 
  * \param client: client requesting the action

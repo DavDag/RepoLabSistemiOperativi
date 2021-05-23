@@ -46,7 +46,8 @@ int spawnThreadForSelect();
 void* selectThreadFun();
 SockMessage_t handleWork(int, ClientID, SockMessage_t);
 void handleError(int, SockMessage_t*);
-FSFile_t createFSFileFromSessionFile(SessionFile_t file);
+FSFile_t copySessionFileIntoFSFile(SessionFile_t file);
+FSFile_t deepCopySessionFileIntoFSFile(SessionFile_t file);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -517,26 +518,32 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
             int isLockRequested = flags & FLAG_LOCK;
             if (flags & FLAG_CREATE) {
                 // Create file
-                FSFile_t fs_file = createFSFileFromSessionFile(file);
-                if ((res = fs_insert(client, fs_file, &outFiles, &outFilesCount, isLockRequested)) != 0) {
+                FSFile_t fs_file = deepCopySessionFileIntoFSFile(file);
+                if ((res = fs_insert(client, fs_file, isLockRequested, &outFiles, &outFilesCount)) != 0) {
                     LOG_ERRO("[#%.2d] Error creating file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
                     break;
                 }
             } else if(isLockRequested) {
                 // Lock file
-                FSFile_t fs_file = createFSFileFromSessionFile(file);
+                FSFile_t fs_file = copySessionFileIntoFSFile(file);
                 if ((res = fs_trylock(client, fs_file)) != 0) {
                     LOG_ERRO("[#%.2d] Error locking file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
                     break;
                 }
             } else {
-                // Nothing
+                // Ensure it exists
+                FSFile_t fs_file = copySessionFileIntoFSFile(file);
+                if ((res = fs_exists(client, fs_file)) != 0) {
+                    LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    handleError(res, &response);
+                    break;
+                }
             }
 
             // Save file opened
-            if ((res = addFileOpened(session, file)) != 0) {
+            if ((res = addFileOpened(session, file, flags)) != 0) {
                 LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
                 handleError(res, &response);
                 break;
@@ -570,7 +577,7 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
 
             // Close file
             // Try unlock file
-            FSFile_t fs_file = createFSFileFromSessionFile(file);
+            FSFile_t fs_file = copySessionFileIntoFSFile(file);
             // Do not handle errors. Simply unlock the file if owned. Otherwise just do nothing.
             fs_unlock(client, fs_file);
 
@@ -639,7 +646,7 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 {
                     // Read file
                     FSFile_t outFile;
-                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    FSFile_t fs_file = copySessionFileIntoFSFile(file);
                     if ((res = fs_obtain(client, fs_file, &outFile)) != 0) {
                         LOG_ERRO("[#%.2d] Error reading file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -647,13 +654,15 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                     }
                     // Add file to response
                     // TODO:
+                    free((char*) outFile.content);
+                    free((char*) outFile.name);
                     break;
                 }
 
                 case MSG_REQ_LOCK_FILE:
                 {
                     // Lock file
-                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    FSFile_t fs_file = copySessionFileIntoFSFile(file);
                     if ((res = fs_trylock(client, fs_file)) != 0) {
                         // TODO:
                         // 
@@ -669,7 +678,7 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 case MSG_REQ_UNLOCK_FILE:
                 {
                     // Unlock file
-                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    FSFile_t fs_file = copySessionFileIntoFSFile(file);
                     if ((res = fs_unlock(client, fs_file)) != 0) {
                         LOG_ERRO("[#%.2d] Error unlocking file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -681,7 +690,7 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 case MSG_REQ_REMOVE_FILE:
                 {
                     // Remove file
-                    FSFile_t fs_file = createFSFileFromSessionFile(file);
+                    FSFile_t fs_file = copySessionFileIntoFSFile(file);
                     if ((res = fs_remove(client, fs_file)) != 0) {
                         LOG_ERRO("[#%.2d] Error removing file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -705,13 +714,6 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 // Save file closed
                 if ((res = remFileOpened(session, file)) != 0) {
                     LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
-                    handleError(res, &response);
-                    break;
-                }
-            } else {
-                // Save operation done
-                if ((res = addOperationDone(session, file)) != 0) {
-                    LOG_ERRO("[#%.2d] Error finishing operation %d on file '%s' for client #%.2d", workingThreadID, request.type, file.name, client);
                     handleError(res, &response);
                     break;
                 }
@@ -778,13 +780,25 @@ void handleError(int status, SockMessage_t* response) {
     }
 }
 
-FSFile_t createFSFileFromSessionFile(SessionFile_t file) {
+FSFile_t copySessionFileIntoFSFile(SessionFile_t file) {
     FSFile_t fs_file = {
         .content    = NULL,
         .contentLen = 0,
-        .name       = (char*) mem_calloc(file.len, sizeof(char)),
+        .name       = file.name,
         .nameLen    = file.len,
     };
-    memcpy(file.name, fs_file.name, file.len);
     return fs_file;
+}
+
+FSFile_t deepCopySessionFileIntoFSFile(SessionFile_t file) {
+    char* name = (char*) mem_malloc(file.len * sizeof(char));
+    memcpy(name, file.name, file.len * sizeof(char));
+    FSFile_t fs_file = {
+        .content    = NULL,
+        .contentLen = 0,
+        .name       = name,
+        .nameLen    = file.len,
+    };
+    return fs_file;
+
 }

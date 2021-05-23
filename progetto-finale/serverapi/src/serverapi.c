@@ -339,19 +339,19 @@ int handleServerStatus(RespStatus_t status) {
     {
         case RESP_STATUS_GENERIC_ERROR:
             errno = ECANCELED;
-            return EXIT_FAILURE;
+            return SERVER_API_FAILURE;
         
         case RESP_STATUS_NOT_PERMITTED:
             errno = EPERM;
-            return EXIT_FAILURE;
+            return SERVER_API_FAILURE;
         
         case RESP_STATUS_INVALID_ARG:  
             errno = EINVAL;
-            return EXIT_FAILURE;
+            return SERVER_API_FAILURE;
         
         case RESP_STATUS_NOT_FOUND:
             errno = ENOENT;
-            return EXIT_FAILURE;
+            return SERVER_API_FAILURE;
 
         case RESP_STATUS_NONE:
             LOG_WARN("Server response status empty...");

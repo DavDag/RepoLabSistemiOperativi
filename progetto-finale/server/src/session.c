@@ -12,8 +12,8 @@ typedef struct {
     int isValid;                                    // Is session valid ?
     timestamp_t creation_time, last_operation_time; // Timestamp for creation date and last operation
     int numFileOpened;                              // Num files opened
-    HashValue filenames[MAX_CLIENT_OPENED_FILES];   // Filename            of file i
-    int numOperations[MAX_CLIENT_OPENED_FILES];     // Num operations done on file i
+    HashValue filenames[MAX_CLIENT_OPENED_FILES];   // Filename         of file i
+    int flags[MAX_CLIENT_OPENED_FILES];             // Flags at opening of file i
 } ClientSession_t;
 
 // ===============================================================================================================
@@ -38,8 +38,8 @@ int createSession(ClientID client) {
     _inn_session->creation_time       = NOW();
     _inn_session->last_operation_time = NOW();
     for (int i = 0; i < MAX_CLIENT_OPENED_FILES; ++i) {
-        _inn_session->filenames[i]     = 0;
-        _inn_session->numOperations[i] = 0;
+        _inn_session->filenames[i] = 0;
+        _inn_session->flags[i]     = 0;
     }
 
     // Returns success
@@ -89,7 +89,7 @@ int hasOpenedFile(SessionClientID session, SessionFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int addFileOpened(SessionClientID session, SessionFile_t file) {
+int addFileOpened(SessionClientID session, SessionFile_t file, int flags) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
@@ -107,8 +107,8 @@ int addFileOpened(SessionClientID session, SessionFile_t file) {
     // Add file
     HashValue key   = hash_string(file.name, file.len);
     const int index = _inn_session->numFileOpened;
-    _inn_session->filenames[index]     = key;
-    _inn_session->numOperations[index] = 1;
+    _inn_session->filenames[index] = key;
+    _inn_session->flags[index]     = flags;
     _inn_session->numFileOpened++;
 
     // Returns success
@@ -128,12 +128,12 @@ int remFileOpened(SessionClientID session, SessionFile_t file) {
         if (_inn_session->filenames[i] == key) {
             // Shift entire array 1 position to the left
             for (int j = i; j < _inn_session->numFileOpened - 1; ++j) {
-                _inn_session->filenames[j]     = _inn_session->filenames[j + 1];
-                _inn_session->numOperations[j] = _inn_session->numOperations[j + 1];
+                _inn_session->filenames[j] = _inn_session->filenames[j + 1];
+                _inn_session->flags[j]     = _inn_session->flags[j + 1];
             }
             // Reset top element
-            _inn_session->filenames[_inn_session->numFileOpened - 1]     = 0;
-            _inn_session->numOperations[_inn_session->numFileOpened - 1] = 0;
+            _inn_session->filenames[_inn_session->numFileOpened - 1] = 0;
+            _inn_session->flags[_inn_session->numFileOpened - 1]     = 0;
             // Decrement total size
             _inn_session->numFileOpened--;
             return __int_ret_updating_ses(_inn_session, 0);
@@ -155,27 +155,9 @@ int canWriteIntoFile(SessionClientID session, SessionFile_t file) {
     for (int i = 0; i < _inn_session->numFileOpened; ++i)
         if (_inn_session->filenames[i] == key)
             return __int_ret_updating_ses(_inn_session, 
-                (_inn_session->numOperations[i] == 1) ? 0 : SESSION_CANNOT_WRITE_FILE
+                (_inn_session->flags[i] == (FLAG_CREATE | FLAG_LOCK)) ? 0 : SESSION_CANNOT_WRITE_FILE
             );
 
-    // Otherwise returns file not opened
-    return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
-}
-
-int addOperationDone(SessionClientID session, SessionFile_t file) {
-    // Retrieve session
-    ClientSession_t* _inn_session = &gSessionTable[session];
-    if (!_inn_session->isValid)
-        return SESSION_NOT_EXIST;
-    
-    // Increment operations
-    HashValue key = hash_string(file.name, file.len);
-    for (int i = 0; i < _inn_session->numFileOpened; ++i)
-        if (_inn_session->filenames[i] == key) {
-            _inn_session->numOperations[i]++;
-            return __int_ret_updating_ses(_inn_session, 0);
-        }
-    
     // Otherwise returns file not opened
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }

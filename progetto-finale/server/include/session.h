@@ -68,11 +68,12 @@ int hasOpenedFile(SessionClientID session, SessionFile_t file);
  * 
  * \param session: destination session
  * \param file   : file to add
+ * \param flags  : flags (CREATE, LOCK, etc...)
  * 
  * \retval 0 : on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_ALREADY_OPENED, SESSION_OUT_OF_MEMORY ]
  */
-int addFileOpened(SessionClientID session, SessionFile_t file);
+int addFileOpened(SessionClientID session, SessionFile_t file, int flags);
 
 /**
  * Remove file from opened list for session.
@@ -95,16 +96,5 @@ int remFileOpened(SessionClientID session, SessionFile_t file);
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED, SESSION_CANNOT_WRITE_FILE ]
  */
 int canWriteIntoFile(SessionClientID session, SessionFile_t file);
-
-/**
- * Notify operation done on file.
- * 
- * \param session: session to check
- * \param file   : file to check
- * 
- * \retval 0 : on success
- * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED ]
- */
-int addOperationDone(SessionClientID session, SessionFile_t file);
 
 #endif // SESSION_H
