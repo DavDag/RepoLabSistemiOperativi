@@ -392,7 +392,7 @@ int handleOption(int index) {
             
             // Log operation data
             if (gIsExtendedLogEnabled)
-                LOG_INFO("{-t} Waited for %ld s and %ld ns", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec));
+                LOG_INFO("{-t} Waited for %ld s and %ld ms", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec) / 1000);
 
             LOG_VERB("Process resumed");
             break;

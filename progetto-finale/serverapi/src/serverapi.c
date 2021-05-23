@@ -11,6 +11,7 @@ static int gSocketFd = -1;
 static char gBuffer[4096];
 
 int waitServerResponse();
+int handleServerStatus(RespStatus_t);
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
     // 1. Create socket
@@ -25,7 +26,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     if (connect(gSocketFd, (struct sockaddr*) &serveraddr, sizeof(serveraddr)) < 0)
         return SERVER_API_FAILURE;
 
-    // 3. Send 'CREATE_SESSION' message
+    // 3. Send 'MSG_REQ_OPEN_SESSION' message
     SockMessage_t msg = {
         .uid = UUID_new(),
         .type = MSG_REQ_OPEN_SESSION
@@ -39,7 +40,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 }
 
 int closeConnection(const char* sockname) {
-    // 1. Send 'CLOSE_SESSION' message
+    // 1. Send 'MSG_REQ_CLOSE_SESSION' message
     SockMessage_t msg = {
         .uid = UUID_new(),
         .type = MSG_REQ_CLOSE_SESSION
@@ -63,7 +64,7 @@ int closeConnection(const char* sockname) {
 int openFile(const char* pathname, int flags) {
     int filenameLen = strlen(pathname) + 1;
 
-    // 1. Send 'OPEN_FILE' message
+    // 1. Send 'MSG_REQ_OPEN_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
         .type = MSG_REQ_OPEN_FILE,
@@ -87,8 +88,10 @@ int openFile(const char* pathname, int flags) {
     return waitServerResponse();
 }
 
-int readFile(const char* pathname, void** buf, size_t* size) {    int filenameLen = strlen(pathname);
-    // 1. Send 'READ_FILE' message
+int readFile(const char* pathname, void** buf, size_t* size) {
+    int filenameLen = strlen(pathname) + 1;
+    
+    // 1. Send 'MSG_REQ_READ_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
         .type = MSG_REQ_READ_FILE,
@@ -113,10 +116,13 @@ int readFile(const char* pathname, void** buf, size_t* size) {    int filenameLe
 }
 
 int readNFiles(int N, const char* dirname) {
-    // 1. Send '' message
+    // 1. Send 'MSG_REQ_READ_N_FILES' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_READ_N_FILES,
+        .request = {
+            .flags = N
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -127,10 +133,23 @@ int readNFiles(int N, const char* dirname) {
 }
 
 int writeFile(const char* pathname, const char* dirname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+    
+    // 1. Send 'MSG_REQ_WRITE_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_WRITE_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .contentLen = 0,
+                .content = { .ptr = NULL }
+            }
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -155,10 +174,23 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 }
 
 int lockFile(const char* pathname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+
+    // 1. Send 'MSG_REQ_LOCK_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_LOCK_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .content = { .ptr = NULL },
+                .contentLen = 0
+            }
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -169,10 +201,23 @@ int lockFile(const char* pathname) {
 }
 
 int unlockFile(const char* pathname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+
+    // 1. Send 'MSG_REQ_UNLOCK_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_UNLOCK_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .content = { .ptr = NULL },
+                .contentLen = 0
+            }
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -183,10 +228,23 @@ int unlockFile(const char* pathname) {
 }
 
 int closeFile(const char* pathname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+
+    // 1. Send 'MSG_REQ_CLOSE_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_CLOSE_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .content = { .ptr = NULL },
+                .contentLen = 0
+            }
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -197,10 +255,23 @@ int closeFile(const char* pathname) {
 }
 
 int removeFile(const char* pathname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+
+    // 1. Send 'MSG_REQ_REMOVE_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_REMOVE_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .content = { .ptr = NULL },
+                .contentLen = 0
+            }
+        }
     };
     if (writeMessage(gSocketFd, gBuffer, 4096, &msg) != 1)
         return SERVER_API_FAILURE;
@@ -240,6 +311,8 @@ int waitServerResponse() {
         case MSG_RESP_SIMPLE:
         {
             LOG_INFO("Resp status: %d", msg.response.status);
+            if (handleServerStatus(msg.response.status) == SERVER_API_FAILURE)
+                return SERVER_API_FAILURE;
             break;
         }
 
@@ -258,5 +331,33 @@ int waitServerResponse() {
             break;
     }
 
+    return SERVER_API_SUCCESS;
+}
+
+int handleServerStatus(RespStatus_t status) {
+    switch (status)
+    {
+        case RESP_STATUS_GENERIC_ERROR:
+            errno = ECANCELED;
+            return EXIT_FAILURE;
+        
+        case RESP_STATUS_NOT_PERMITTED:
+            errno = EPERM;
+            return EXIT_FAILURE;
+        
+        case RESP_STATUS_INVALID_ARG:  
+            errno = EINVAL;
+            return EXIT_FAILURE;
+        
+        case RESP_STATUS_NOT_FOUND:
+            errno = ENOENT;
+            return EXIT_FAILURE;
+
+        case RESP_STATUS_NONE:
+            LOG_WARN("Server response status empty...");
+        case RESP_STATUS_OK:
+        default:
+            break;
+    }
     return SERVER_API_SUCCESS;
 }

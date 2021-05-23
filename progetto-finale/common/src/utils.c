@@ -21,6 +21,7 @@ void* mem_malloc(size_t size) {
 
     // Check for error
     if (ptr == NULL) {
+        // On error, function fails (some bigger problem occurred)
         LOG_CRIT("Malloc failed trying to allocate %ul bytes", size);
         exit(EXIT_FAILURE);
     }
@@ -34,6 +35,7 @@ void* mem_calloc(size_t num, size_t size) {
 
     // Check for error
     if (ptr == NULL) {
+        // On error, function fails (some bigger problem occurred)
         LOG_CRIT("Calloc failed trying to allocate %ul bytes", num * size);
         exit(EXIT_FAILURE);
     }
@@ -48,6 +50,8 @@ void* mem_realloc(void* ptr, size_t size) {
     // Check for error
     if (newptr == NULL) {
         free(ptr); // Original ptr still valid
+
+        // On error, function fails (some bigger problem occurred)
         LOG_CRIT("Realloc failed trying to allocate %ul bytes", size);
         exit(EXIT_FAILURE);
     }
@@ -74,7 +78,49 @@ void unlock_mutex(pthread_mutex_t* mutex) {
     int res = 0;
     if ((res = pthread_mutex_unlock(mutex)) != 0) {
         errno = res;
-        LOG_ERRNO("Server process crashed unlocking mutex inside tryPush() call");
+        LOG_ERRNO("Server process crashed unlocking mutex");
+
+        // On error, function fails (some bigger problem occurred)
+        // source:
+        //   https://linux.die.net/man/3/pthread_mutex_unlock
+        LOG_CRIT("Terminating server...");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void lock_rw_mutex_read(pthread_rwlock_t* mutex) {
+    int res = 0;
+    if ((res = pthread_rwlock_rdlock(mutex)) != 0) {
+        errno = res;
+        LOG_ERRNO("Server process crashed locking rw mutex for read");
+
+        // On error, function fails (some bigger problem occurred)
+        // source:
+        //   https://linux.die.net/man/3/pthread_rwlock_rdlock
+        LOG_CRIT("Terminating server...");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void lock_rw_mutex_write(pthread_rwlock_t* mutex) {
+    int res = 0;
+    if ((res = pthread_rwlock_wrlock(mutex)) != 0) {
+        errno = res;
+        LOG_ERRNO("Server process crashed locking rw mutex for write");
+
+        // On error, function fails (some bigger problem occurred)
+        // source:
+        //   https://linux.die.net/man/3/pthread_rwlock_wrlock
+        LOG_CRIT("Terminating server...");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void unlock_rw_mutex(pthread_rwlock_t* mutex) {
+    int res = 0;
+    if ((res = pthread_rwlock_unlock(mutex)) != 0) {
+        errno = res;
+        LOG_ERRNO("Server process crashed unlocking rw mutex");
 
         // On error, function fails (some bigger problem occurred)
         // source:

@@ -8,12 +8,14 @@
 
 #define LOG_TIMESTAMP
 // #define LOG_WITHOUT_COLORS
-// #define LOG_DEBUG
+#define LOG_DEBUG
 #include <logger.h>
 #include <common.h>
 
 #include "server.h"
 #include "circ_queue.h"
+#include "file_system.h"
+#include "session.h"
 
 #define PIPE_READ_END  0
 #define PIPE_WRITE_END 1
@@ -42,7 +44,8 @@ int spawnWorkers();
 void* workerThreadFun();
 int spawnThreadForSelect();
 void* selectThreadFun();
-SockMessage_t handleWork(int, SockMessage_t);
+SockMessage_t handleWork(int, ClientID, SockMessage_t);
+void handleSessionError(int, SockMessage_t*);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -66,6 +69,7 @@ static pthread_cond_t gQueueCond       = PTHREAD_COND_INITIALIZER;
 
 int initializeServer(ServerConfig_t configs) {
     LOG_VERB("[#MN] Initializing server ...");
+    gConfigs = configs;
 
     // Registering function to call on exit
     atexit(cleanup);
@@ -76,12 +80,14 @@ int initializeServer(ServerConfig_t configs) {
     gSigHupReceived  = 0;
     setupSignals();
 
-    // Socket and global state
-    gConfigs = configs;
+    // Socket
     if (setupSocket() != RES_OK) return RES_ERROR;
 
     // Msg queue
     gMsgQueue = createQueue(RING_BUFFER_SIZE);
+
+    // Initialize FS
+    initializeFileSystem(gConfigs.fsConfigs);
 
     // Pipe MainThread -> SelectThread
     if (pipe(mainToSelectPipe) < 0) {
@@ -111,7 +117,7 @@ int runServer() {
     while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived) {
         // Accept new client
         if ((newConnFd = accept(gSocketFd, NULL, 0)) < 0) {
-            LOG_ERRNO("[#MN] Unable to accept client");
+            if (errno != EINTR) LOG_ERRNO("[#MN] Unable to accept client");
             continue;
         }
 
@@ -174,6 +180,9 @@ int terminateSever() {
     }
     free(gMsgQueue->data);
     free(gMsgQueue);
+
+    // Close FS
+    terminateFileSystem();
 
     // Returns success
     return RES_OK;
@@ -292,16 +301,16 @@ void* workerThreadFun(void* args) {
         }
 
         // Message read.
-        int clientFd          = ((WorkEntry_t*) (item))->fd;
+        ClientID client       = ((WorkEntry_t*) (item))->fd;
         SockMessage_t request = ((WorkEntry_t*) (item))->msg;
         LOG_INFO("[#%.2d] work received.", threadID);
 
         // Handle message
-        SockMessage_t response = handleWork(threadID, request);
+        SockMessage_t response = handleWork(threadID, client, request);
         LOG_INFO("[#%.2d] work completed. Sending response...", threadID);
 
         // Write response to client
-        if (writeMessage(clientFd, _inn_buffer, 4096, &response) == -1)
+        if (writeMessage(client, _inn_buffer, 4096, &response) == -1)
             LOG_ERRNO("Error sending response");
 
         // Release resources        
@@ -437,7 +446,10 @@ int spawnThreadForSelect() {
     return RES_OK;
 }
 
-SockMessage_t handleWork(int workingThreadID, SockMessage_t request) {
+SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t request) {
+    // Retrieve client session
+
+
     // Prepare response
     SockMessage_t response = {
         .uid  = UUID_new(),
@@ -448,34 +460,113 @@ SockMessage_t handleWork(int workingThreadID, SockMessage_t request) {
     };
 
     // Handle request
+    int res = 0;
     switch (request.type)
     {
         case MSG_REQ_OPEN_SESSION:
         {
-            // TODO: Handle session opened
+            // Create session
+            if ((res = createSession(client)) != 0) {
+                LOG_ERRO("[#%.2d] Error creating session for client #%.2d", workingThreadID, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // LOG
             LOG_VERB("[#%.2d] Intialized client session.", workingThreadID);
             break;
         }
 
         case MSG_REQ_CLOSE_SESSION:
         {
-            // TODO: Handle session closed
+            // Destroy session
+            if ((res = destroySession(client)) != 0) {
+                LOG_ERRO("[#%.2d] Error destroying session for client #%.2d", workingThreadID, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // LOG
             LOG_VERB("[#%.2d] Terminated client session.", workingThreadID);
             break;
         }
 
         case MSG_REQ_OPEN_FILE:
         {
-            const int flags         = request.request.flags;
-            const char* filenameAbs = request.request.file.filename.abs.ptr;
-            // const char* filenameRel = request.request.file.filename.rel.ptr;
-            // TODO: Handle file opening
-            LOG_VERB("[#%.2d] File %s opened with flags %d.", workingThreadID, filenameAbs, flags);
+            // Retrieve session
+            ClientSessionID session;
+            if ((res = getSession(client, &session)) != 0) {
+                LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // Check file was not opened
+            const int flags = request.request.flags; // TODO:
+            FSFile_t file   = {
+                .name    = request.request.file.filename.abs.ptr,
+                .nameLen = request.request.file.filename.len,
+            };
+            if ((res = hasOpenedFile(session, file)) != SESSION_FILE_NEVER_OPENED) {
+                LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // Open file
+            // TODO:
+
+            // Communicate file opened
+            if ((res = addFileOpened(session, file)) != 0) {
+                LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // LOG
+            LOG_VERB("[#%.2d] File '%s' opened with flags %d.", workingThreadID, file.name, flags);
             break;
         }
 
         case MSG_REQ_CLOSE_FILE:
         {
+            // Retrieve session
+            ClientSessionID session;
+            if ((res = getSession(client, &session)) != 0) {
+                LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // Check file was opened
+            FSFile_t file   = {
+                .name    = request.request.file.filename.abs.ptr,
+                .nameLen = request.request.file.filename.len,
+            };
+            if ((res = hasOpenedFile(session, file)) != SESSION_FILE_ALREADY_OPENED) {
+                LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // Close file
+            // TODO:
+
+            // Communicate file closed
+            if ((res = remFileOpened(session, file)) != 0) {
+                LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                handleSessionError(res, &response);
+                break;
+            }
+
+            // LOG
+            LOG_VERB("[#%.2d] File '%s' closed.", workingThreadID, file.name);
+            break;
+        }
+
+        case MSG_REQ_READ_N_FILES:
+        {
+            // TODO:
             break;
         }
         
@@ -483,10 +574,11 @@ SockMessage_t handleWork(int workingThreadID, SockMessage_t request) {
         case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
+            // TODO:
+            // LOG
             LOG_VERB("[#%.2d] Generic request received from client.", workingThreadID);
             break;
         }
@@ -504,4 +596,41 @@ SockMessage_t handleWork(int workingThreadID, SockMessage_t request) {
 
     // Return response
     return response;
+}
+
+void handleSessionError(int status, SockMessage_t* response) {
+    LOG_VERB("Handling status %d...", status);
+    switch (status)
+    {
+        case SESSION_FILE_ALREADY_OPENED:
+        {
+            response->response.status = RESP_STATUS_INVALID_ARG;
+            break;
+        }
+
+        case SESSION_FILE_NEVER_OPENED:
+        {
+            response->response.status = RESP_STATUS_NOT_FOUND;
+            break;
+        }
+
+        case SESSION_OUT_OF_MEMORY:
+        {
+            response->response.status = RESP_STATUS_GENERIC_ERROR;
+            break;
+        }
+
+        case SESSION_ALREADY_EXIST:
+        case SESSION_NOT_EXIST:
+        case SESSION_CANNOT_WRITE_FILE:
+        {
+            response->response.status = RESP_STATUS_NOT_PERMITTED;
+            break;
+        }
+
+        case 0:
+        default:
+            // Should never append
+            break;
+    }
 }

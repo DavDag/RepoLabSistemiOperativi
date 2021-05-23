@@ -2,7 +2,7 @@ CC       =  gcc
 CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors -fPIC -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
 INCLUDES = -I $(PWD)/common/include -I ./include
 LDFLAGS  = 
-LIBS     = -L$(PWD)/common/$(BINARIES_DIR) -lcommon
+LIBS     = -L$(PWD)/common/$(BINARIES_DIR) -lcommon -pthread
 OPTFLAGS = -g
 AR       =  ar
 ARFLAGS  =  rvs

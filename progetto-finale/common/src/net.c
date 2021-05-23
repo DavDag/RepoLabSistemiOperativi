@@ -80,13 +80,19 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
             break;
         }
 
+        case MSG_REQ_READ_N_FILES:
+        {
+            // Flags
+            readFromBuffer(&buffer, &msg->request.flags, sizeof(int));
+            break;
+        }
+
         case MSG_REQ_OPEN_FILE:
         case MSG_REQ_CLOSE_FILE:
         case MSG_REQ_READ_FILE:
         case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
@@ -163,7 +169,6 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
@@ -185,6 +190,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
     
         case MSG_REQ_OPEN_SESSION:
         case MSG_REQ_CLOSE_SESSION:
+        case MSG_REQ_READ_N_FILES:
         case MSG_RESP_SIMPLE:
         default:
             break;
@@ -234,13 +240,19 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
             break;
         }
 
+        case MSG_REQ_READ_N_FILES:
+        {
+            // Flags
+            writeToBuffer(&buffer, &msg->request.flags, sizeof(int));
+            break;
+        }
+
         case MSG_REQ_OPEN_FILE:
         case MSG_REQ_CLOSE_FILE:
         case MSG_REQ_READ_FILE:
         case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
@@ -309,7 +321,6 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
         case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
@@ -331,6 +342,7 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
 
         case MSG_REQ_OPEN_SESSION:
         case MSG_REQ_CLOSE_SESSION:
+        case MSG_REQ_READ_N_FILES:
         case MSG_RESP_SIMPLE:
         default:
             break;
@@ -354,7 +366,13 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
 }
 
 void freeMessageContent(SockMessage_t* msg) {
-    // TODO:
+    // Release memory for allocated array
+    if (msg->type == MSG_RESP_WITH_FILES)
+        free(msg->response.files);
+    
+    // Release memory for raw content
+    if (msg->raw_content != NULL)
+        free(msg->raw_content);
 }
 
 // ======================================= DEFINITIONS: Inner functions =============================================

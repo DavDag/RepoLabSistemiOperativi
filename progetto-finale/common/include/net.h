@@ -36,7 +36,7 @@ typedef enum {
 typedef enum {
     RESP_STATUS_NONE          = 0, // Default
     RESP_STATUS_OK            = 1, // Success
-    RESP_STATUS_GENERIC_ERROR = 2, // Error
+    RESP_STATUS_GENERIC_ERROR = 2, // Error: ECANCELED
     RESP_STATUS_NOT_PERMITTED = 3, // Failure: EPERM
     RESP_STATUS_INVALID_ARG   = 4, // Failure: EINVAL
     RESP_STATUS_NOT_FOUND     = 5, // Failure: ENOENT

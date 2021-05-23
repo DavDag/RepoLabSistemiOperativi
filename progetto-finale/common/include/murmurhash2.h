@@ -13,7 +13,7 @@ static_assert(sizeof(int) == 4, "Must be 4 bytes");
 // code based on
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash2.cpp
 
-static inline HashValue hash_string(const unsigned char * string, int len)
+static inline HashValue hash_string(const char * string, int len)
 {
     const unsigned int m = 0x5bd1e995;
     const int r = 24;

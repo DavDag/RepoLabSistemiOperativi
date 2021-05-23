@@ -9,10 +9,15 @@ int main(int argc, char** argv) {
         // TODO: read from file
         ServerConfig_t configs = {
             .socketFilame = DEFAULT_SOCK_FILE,
-            .maxClients = 4,
+            .maxClients   =  4,
             .maxMemory_MB = 32,
-            .maxSlot = 10,
-            .numWorkers = 2,
+            .maxSlot      = 10,
+            .numWorkers   =  2,
+            .fsConfigs    = {
+                .tableSize           = 1024 * 1024,
+                .maxFileCapacityMB   = 10,
+                .maxFileCapacitySlot = 10,
+            },
         };
 
         // Initialize server and its internal state. Must be called before anything else
