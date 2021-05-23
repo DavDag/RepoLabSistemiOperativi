@@ -203,7 +203,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
 #endif
 
     // Returns success
-    return 1;
+    return msgSize;
 }
 
 #ifdef DEBUG_MESSAGES
@@ -362,7 +362,7 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
 #endif
 
     // Returns success
-    return 1;
+    return msgSize;
 }
 
 void freeMessageContent(SockMessage_t* msg) {

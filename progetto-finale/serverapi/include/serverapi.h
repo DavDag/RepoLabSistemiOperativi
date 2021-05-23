@@ -10,6 +10,8 @@
 #define SERVER_API_SUCCESS  0 // On Success
 #define SERVER_API_FAILURE -1 // On Failure
 
+typedef struct { int bytesW, bytesR; } ApiBytesInfo_t;
+
 /**
  * Viene aperta una connessione AF_UNIX al socket file sockname. Se il
  * server non accetta immediatamente la richiesta di connessione, la
@@ -128,5 +130,12 @@ int closeFile(const char* pathname);
  * client diverso da chi effettua la removeFile.
  */
 int removeFile(const char* pathname);
+
+/**
+ * Request info about bytes read and written. 
+ * 
+ * \retval struct: containing bytes data
+ */
+ApiBytesInfo_t getBytesData();
 
 #endif // SERVER_API_H

@@ -1,5 +1,6 @@
 #include "client.h"
 
+#include <ftw.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +68,8 @@ int hasPriority(CmdLineOptType_t);
 int handleOption(int);
 int freeOption(int);
 
+int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct FTW* ftwbuf);
+
 // ======================================= DEFINITIONS: Global vars =================================================
 
 static const char* gSocketFilename = NULL;
@@ -98,6 +101,9 @@ static const char* const CLIENT_USAGE =
 "  -u file1[,file2]   lista di nomi di file su cui rilasciare la mutua esclusione.\n"
 "  -c file1[,file2]   lista di file da rimuovere dal server se presenti.\n\n"
 ;
+
+static int gNftwExploredFileCount = 0;
+static int gNftwExploredFileLimit = 0;
 
 // ======================================= DEFINITIONS: client.h functions ==========================================
 
@@ -385,8 +391,8 @@ int handleOption(int index) {
         
         case OPT_WAIT:
         {
-            struct timespec timeToWait = { .tv_sec = (option.val) / 1000, .tv_nsec = (option.val % 1000) * 1000 };
-            struct timespec timeRemaining;
+            struct timespec timeToWait    = { .tv_sec = (option.val) / 1000, .tv_nsec = (option.val % 1000) * 1000 };
+            struct timespec timeRemaining = { .tv_sec = 0, .tv_nsec = 0 };
             if (nanosleep(&timeToWait, &timeRemaining) < 0)
                 LOG_ERRNO("Error sleeping");
             
@@ -427,9 +433,11 @@ int handleOption(int index) {
             }
 
             // Log operation data
-            if (gIsExtendedLogEnabled)
-                LOG_INFO("{-R} numFiles: %d, dirname: '%s' > %s ! Bytes wrote %llu",
-                    option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
+            if (gIsExtendedLogEnabled) {
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("{-R} numFiles: %d, dirname: '%s', %s. Sent %dB, Received %dB",
+                    option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+            }
 
             LOG_VERB("Files read from server");
             break;
@@ -496,9 +504,11 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (gIsExtendedLogEnabled)
-                    LOG_INFO("{-W} file: '%s', dirname: '%s' > %s ! Bytes wrote %llu",
-                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
+                if (gIsExtendedLogEnabled) {
+                    ApiBytesInfo_t info = getBytesData();
+                    LOG_INFO("{-W} file: %s, dirname: '%s', %s. Sent %dB, Received %dB",
+                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                }
             }
             break;
         }
@@ -534,9 +544,11 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (gIsExtendedLogEnabled)
-                    LOG_INFO("{-r} file: '%s', dirname: '%s' > %s ! Bytes read %llu",
-                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", 0L);
+                if (gIsExtendedLogEnabled) {
+                    ApiBytesInfo_t info = getBytesData();
+                    LOG_INFO("{-r} file: %s, dirname: '%s', %s. Sent %dB, Received %dB",
+                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                }
             }
             LOG_VERB("Files read from server");
             break;
@@ -565,8 +577,11 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (gIsExtendedLogEnabled)
-                    LOG_INFO("{-l} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
+                if (gIsExtendedLogEnabled) {
+                    ApiBytesInfo_t info = getBytesData();
+                    LOG_INFO("{-l} file: %s', %s. Sent %dB, Received %dB",
+                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                }
             }
             LOG_VERB("Files locked");
             break;
@@ -595,8 +610,11 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (gIsExtendedLogEnabled)
-                    LOG_INFO("{-u} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
+                if (gIsExtendedLogEnabled) {
+                    ApiBytesInfo_t info = getBytesData();
+                    LOG_INFO("{-u} file: %s, %s. Sent %dB, Received %dB",
+                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                }
             }
             LOG_VERB("Files unlocked");
             break;
@@ -622,8 +640,11 @@ int handleOption(int index) {
 
                 // [4]
                 // Log operation data
-                if (gIsExtendedLogEnabled)
-                    LOG_INFO("{-c} file: '%s' > %s !", pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED");
+                if (gIsExtendedLogEnabled) {
+                    ApiBytesInfo_t info = getBytesData();
+                    LOG_INFO("{-c} file: %s, %s. Sent %dB, Received %dB",
+                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                }
             }
             LOG_VERB("Files removed from server");
             break;
@@ -631,8 +652,13 @@ int handleOption(int index) {
 
         case OPT_WRITE_DIR_REQ:
         {
-            // TODO: use ntfw()
-            // TODO: Log operation data
+            // Explore directory using ntfw
+            gNftwExploredFileCount = 0;
+            gNftwExploredFileLimit = option.val;
+            if (nftw(option.dirname, nftwExplorFunc, 16, FTW_PHYS) == -1) {
+                LOG_ERRNO("Error exploring directory '%s'", option.dirname);
+                break;
+            }
             LOG_VERB("Directory sent to server", option.dirname);
             break;
         }
@@ -678,4 +704,34 @@ int freeOption(int index) {
             return RES_ERROR;
     }
     return RES_OK;
+}
+
+int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct FTW* ftwbuf) {
+    if (tflag != FTW_F) return 0;
+    int status = SERVER_API_SUCCESS;
+
+    // [1]
+    if ((status = openFile(fpath, FLAG_CREATE | FLAG_LOCK)) == SERVER_API_SUCCESS) {
+        // [2]
+        if ((status = writeFile(fpath, NULL)) == SERVER_API_FAILURE)
+            LOG_ERRNO("Error writing file '%s'", fpath);
+        // [3]
+        if (closeFile(fpath) == SERVER_API_FAILURE) {
+            LOG_ERRNO("Error closing file '%s'", fpath);
+            status = SERVER_API_FAILURE;
+        }
+    } else {
+        LOG_ERRNO("Error opening file '%s'", fpath);
+    }
+
+    // [4]
+    // Log operation data
+    if (gIsExtendedLogEnabled) {
+        ApiBytesInfo_t info = getBytesData();
+        LOG_INFO("{-w} file: '%s', %s. Sent %dB, Received %dB",
+            fpath, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+    }
+    
+    ++gNftwExploredFileCount;
+    return (gNftwExploredFileLimit == 0) ? 0 : (gNftwExploredFileCount == gNftwExploredFileLimit);
 }

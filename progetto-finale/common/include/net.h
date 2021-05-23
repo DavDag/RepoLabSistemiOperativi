@@ -116,14 +116,14 @@ typedef struct {
  * Read message from socket. No memory allocation done, message struct contains 
  * pointers to buffer data. Do not free buffer without freeing message.
  * 
- * \param socketfd   : file descriptor of the socket
- * \param buffer     : buffer for storing data
- * \param bufferSize : buffer size
- * \param msg        : ptr to the destination message
+ * \param socketfd  : file descriptor of the socket
+ * \param buffer    : buffer for storing data
+ * \param bufferSize: buffer size
+ * \param msg       : ptr to the destination message
  * 
- * \retval -1 : on error (errno set)
- * \retval  0 : on EOF (connection closed)
- * \retval  1 : on success
+ * \retval -1: on error (errno set)
+ * \retval  0: on EOF (connection closed)
+ * \retval >0: on success
  */
 int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
 
@@ -131,14 +131,14 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  * Write message into socket. No memory allocation done, message struct contains 
  * pointers to buffer data. Do not free buffer without freeing message.
  * 
- * \param socketfd   : file descriptor of the socket
- * \param buffer     : buffer for storing data
- * \param bufferSize : buffer size
- * \param msg        : ptr to the source message
+ * \param socketfd  : file descriptor of the socket
+ * \param buffer    : buffer for storing data
+ * \param bufferSize: buffer size
+ * \param msg       : ptr to the source message
  * 
- * \retval -1 : on error (errno set)
- * \retval  0 : on EOF (connection closed)
- * \retval  1 : on success
+ * \retval -1: on error (errno set)
+ * \retval  0: on EOF (connection closed)
+ * \retval >0: on success
  */
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
 
@@ -150,18 +150,18 @@ void freeMessageContent(SockMessage_t* msg);
 /**
  * Read EXACLTY N bytes from the filedescriptor 'fd'
  * 
- * \retval -1 : on error (errno set)
- * \retval  0 : when one of the inner 'read' call returns EOF
- * \retval  1 : on success
+ * \retval -1: on error (errno set)
+ * \retval  0: when one of the inner 'read' call returns EOF
+ * \retval  1: on success
  */
 int readN(int fd, char* buf, size_t size);
 
 /**
  * Write EXACLTY N bytes from the filedescriptor 'fd'
  * 
- * \retval -1 : on error (errno set)
- * \retval  0 : when one of the inner 'write' call returns 0
- * \retval  1 : on success
+ * \retval -1: on error (errno set)
+ * \retval  0: when one of the inner 'write' call returns 0
+ * \retval  1: on success
  */
 int writeN(int fd, char* buf, size_t size);
 

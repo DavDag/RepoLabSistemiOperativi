@@ -9,7 +9,7 @@
 
 #define EMPTY_OWNER -1
 
-#define DEBUG_LOG
+// #define DEBUG_LOG
 
 typedef struct FSCacheEntry_t {
     ClientID owner;                   // owner of the lock (if locked, otherwise -1)

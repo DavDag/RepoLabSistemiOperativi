@@ -603,6 +603,7 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
 
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_READ_FILE:
+        case MSG_REQ_LOCK_FILE:
         case MSG_REQ_UNLOCK_FILE:
         case MSG_REQ_REMOVE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
