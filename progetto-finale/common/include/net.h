@@ -8,6 +8,8 @@
 
 #define DEFAULT_SOCK_FILE "../cs_sock"
 
+#define MAX_FILE_SIZE 8 * 1024 * 1024 // ~> 8MB
+
 #define FLAG_EMPTY  0x00 // Empty
 #define FLAG_CREATE 0x01 // Request creation
 #define FLAG_LOCK   0x02 // Request lock

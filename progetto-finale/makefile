@@ -40,17 +40,11 @@ test3:
 #
 # Shortcuts to run binaries
 #
-run-client:
-	$(MAKE) -C client simple-run ARGS="-p -L5 -w ./dir"
-
-run-valgrind-client:
-	$(MAKE) -C client valgrind-test ARGS="-p -w ./dir"
-
 run-server:
 	$(MAKE) -C server simple-run ARGS=""
 
 run-valgrind-server:
-	$(MAKE) -C server valgrind-test ARGS=""
+	$(MAKE) -C server valgrind-test ARGS="../configs/test2.txt"
 
 #
 # Testing

@@ -20,7 +20,7 @@
 #define PIPE_READ_END  0
 #define PIPE_WRITE_END 1
 
-#define RING_BUFFER_SIZE 16
+#define RING_BUFFER_SIZE 64
 
 #define EXIT_REQUESTED 1000 // Message sent from main thread to select thread to request to stop reading
 #define NEW_CONNECTION 1001 // Message sent from main thread to select thread to notify client connection
@@ -273,8 +273,9 @@ void cleanup() {
 
 void* workerThreadFun(void* args) {
     // vars
-    char _inn_buffer[4096];
-    const int threadID = ((WorkerThreadArgs_t*) args)->id;
+    char* _inn_buffer   = (char*) mem_malloc(MAX_FILE_SIZE * sizeof(char));
+    int innerBufferSize = MAX_FILE_SIZE;
+    const int threadID  = ((WorkerThreadArgs_t*) args)->id;
     int res = 0;
 
     // Stop working when SIGINT / SIGQUIT received and on SIGHUP when queue is empty
@@ -312,23 +313,23 @@ void* workerThreadFun(void* args) {
         LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
 
         // Write response to client
-        if (writeMessage(client, _inn_buffer, 4096, &response) == -1)
+        if (writeMessage(client, _inn_buffer, innerBufferSize, &response) == -1)
             LOG_ERRNO("Error sending response");
 
         // Release resources        
         freeMessageContent(&request, 1);
         freeMessageContent(&response, 1);
     }
-    
+    free(_inn_buffer);
     return NULL;
 }
 
 void* selectThreadFun(void* args) {
-    // TODO: Update adding a config
-    char _inn_buffer[4096];
+    char* _inn_buffer   = (char*) mem_malloc(MAX_FILE_SIZE * sizeof(char));
+    int innerBufferSize = MAX_FILE_SIZE;
     SockMessage_t msg;
-    int bufferIndex = 0;
-    WorkEntry_t works[RING_BUFFER_SIZE];
+    WorkEntry_t works[RING_BUFFER_SIZE * RING_BUFFER_SIZE];
+    int bufferIndex     = 0;
 
     // Run until signal is received
     fd_set fds_cpy;
@@ -389,7 +390,7 @@ void* selectThreadFun(void* args) {
                 if (fd == mainToSelectPipe[PIPE_READ_END]) continue;
 
                 // Read message from client
-                if ((res = readMessage(fd, _inn_buffer, 4096, &msg)) < 0) {
+                if ((res = readMessage(fd, _inn_buffer, innerBufferSize, &msg)) < 0) {
                     LOG_ERRNO("[#SE] Error reading message");
                     continue;
                 }
@@ -422,7 +423,7 @@ void* selectThreadFun(void* args) {
         }
         gMaxFd = newMaxFd;
     }
-
+    free(_inn_buffer);
     return NULL;
 }
 
@@ -650,7 +651,15 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
             {
                 case MSG_REQ_WRITE_FILE:
                 {
-                    // TODO:
+                    // Write file
+                    FSFile_t fs_file = deepCopyRequestIntoFile(request);
+                    if ((res = fs_modify(client, fs_file, &outFiles, &outFilesCount)) != 0) {
+                        LOG_ERRO("[#%.2d] Error writing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        if (fs_file.content) free((char*) fs_file.content); // Memory needs to be released
+                        if (fs_file.name)    free((char*) fs_file.name);    // Memory needs to be released
+                        break;
+                    }
                     break;
                 }
 

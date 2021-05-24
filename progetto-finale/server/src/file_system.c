@@ -81,7 +81,7 @@ int terminateFileSystem() {
 
     // 
     LOG_INFO("[#FS] Max slot used: %6d / %6d", gMaxSlotUsed, gConfigs.maxFileCapacitySlot); // SUMMARY: Max slot used
-    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), gConfigs.maxFileCapacityMB); // SUMMARY: Max MB used
+    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), ((float) gConfigs.maxFileCapacityMB)); // SUMMARY: Max MB used
     LOG_INFO("[#FS] Cache misses : %6d", gCacheMisses); // SUMMARY: Cache misses count
     // [#FS] 
 
@@ -126,8 +126,6 @@ int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFile
     // Check if file exist
     FSCacheEntry_t* oldEntry = getValueFromKey(key);
     if (oldEntry == NULL) {
-        // TODO: Add cache misses managment
-
         // Update hashmap
         setValueForKey(key, newEntry);
 
@@ -415,7 +413,7 @@ void log_cache_entirely(const char* const after) {
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
     while (item != NULL && depth < DEPTH_LIMIT) {
-        LOG_VERB("Ptr: %p. Owner: %+.3d Name: '%16s'. Content: '%16s'. N: %p. P: %p", item, item->owner, item->file.name, item->file.content, item->nex, item->pre);
+        LOG_VERB("Ptr: %p. Owner: %+.3d Name: '%16s'. Content Size: %dB. N: %p. P: %p", item, item->owner, item->file.name, item->file.contentLen, item->nex, item->pre);
         item = item->pre;
         depth++;
     }
@@ -483,6 +481,9 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
     if (newFile == NULL) gCache.slotUsed--;
     if (oldFile == NULL) gCache.slotUsed++;
 
+    gMaxSlotUsed  = MAX(gMaxSlotUsed,  gCache.slotUsed);
+    gMaxBytesUsed = MAX(gMaxBytesUsed, gCache.bytesUsed);
+
     // Check for size limits (MB)
     if (gCache.bytesUsed > gCache.bytesMax) {
         // Tmp array
@@ -497,7 +498,7 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
             // Remove item from cache
             {
                 // Update hashmap
-                HashValue key = hash_string(item->file.name, item->file.nameLen);
+                HashValue key = getKey(item->file);
                 setValueForKey(key, NULL);
 
                 // Update cache
