@@ -1,0 +1,44 @@
+# 
+# Path to socket file
+# Must be a valid path
+# 
+socketFile=../cs_sock
+
+# 
+# Path to log file
+# Must be a valid path
+# 
+logFile=../log.txt
+
+#
+# Worker count
+# Must be a positive number
+#
+numWorkers=4
+
+# 
+# Max connected clients
+# Must be a positive number
+# 
+maxClients=32
+
+# 
+# Max filesystem capacity in megabytes
+# Must be a positive number
+# 
+maxSizeMB=50
+
+# 
+# Max filesystem capacity in slots
+# Must be a positive number
+# 
+maxSizeSlot=250
+
+# 
+# Table size for internal hashmap
+# Valid values are [ SMALLEST, SMALL, MEDIUM, BIG, BIGGEST ]
+#
+# If estimated average count of slot used is low, consider using SMALL
+# If estimated average count of slot used is high, consider using BIG
+# 
+tableSize=MEDIUM

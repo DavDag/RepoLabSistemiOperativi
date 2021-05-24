@@ -155,7 +155,7 @@ int runServer() {
 }
 
 int terminateSever() {
-    LOG_VERB("[#MN] Terminating server ...");
+    LOG_INFO("[#MN] Terminating server ...");
     
     // Wait select thread
     LOG_VERB("[#MN] Waiting select thread...");
@@ -178,12 +178,12 @@ int terminateSever() {
     // Free remaining items inside queue (if any)
     CircQueueItemPtr_t item;
     while (tryPop(gMsgQueue, &item) == 1) {
-        freeMessageContent(&((WorkEntry_t*) item)->msg);
+        freeMessageContent(&((WorkEntry_t*) item)->msg, 1);
     }
     free(gMsgQueue->data);
     free(gMsgQueue);
 
-    // Close FS
+    // Close FS & Log execution summary
     terminateFileSystem();
 
     // Returns success
@@ -230,8 +230,8 @@ int setupSocket() {
     SocketAddress_t addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strcpy(addr.sun_path, gConfigs.socketFilame);
-    unlink(gConfigs.socketFilame); // Make sure file does not exist
+    strcpy(addr.sun_path, gConfigs.socketFilename);
+    unlink(gConfigs.socketFilename); // Make sure file does not exist
     if (bind(gSocketFd, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
         LOG_ERRNO("[#MN] Error binding socket");
         return RES_ERROR;
@@ -265,7 +265,7 @@ void cleanup() {
             LOG_ERRNO("[#MN] Error closing pipe 1");
 
     // Delete socket fd
-    if (unlink(gConfigs.socketFilame) < 0)
+    if (unlink(gConfigs.socketFilename) < 0)
         LOG_ERRNO("[#MN] Error deleting socket file");
     
     LOG_VERB("[#MN] Cleanup terminated");
@@ -286,7 +286,7 @@ void* workerThreadFun(void* args) {
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gCondMutex);
         while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gMsgQueue, &item)) == 0) {
-            LOG_INFO("[#%.2d] waiting for work...", threadID);
+            LOG_VERB("[#%.2d] waiting for work...", threadID);
             // Wait for cond
             if ((res = pthread_cond_wait(&gQueueCond, &gCondMutex)) != 0) {
                 errno = res;
@@ -305,19 +305,19 @@ void* workerThreadFun(void* args) {
         // Message read.
         ClientID client       = ((WorkEntry_t*) (item))->fd;
         SockMessage_t request = ((WorkEntry_t*) (item))->msg;
-        LOG_INFO("[#%.2d] work received.", threadID);
+        LOG_VERB("[#%.2d] work received.", threadID);
 
         // Handle message
         SockMessage_t response = handleWork(threadID, client, request);
-        LOG_INFO("[#%.2d] work completed. Sending response...", threadID);
+        LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
 
         // Write response to client
         if (writeMessage(client, _inn_buffer, 4096, &response) == -1)
             LOG_ERRNO("Error sending response");
 
         // Release resources        
-        freeMessageContent(&request);
-        freeMessageContent(&response);
+        freeMessageContent(&request, 1);
+        freeMessageContent(&response, 1);
     }
     
     return NULL;

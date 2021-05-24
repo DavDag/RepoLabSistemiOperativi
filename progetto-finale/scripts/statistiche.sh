@@ -1,0 +1,2 @@
+LOG_FILE=$1
+echo $LOG_FILE

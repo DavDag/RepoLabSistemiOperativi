@@ -26,13 +26,16 @@ $(SUBDIRS):
 
 
 test1:
-	
+	$(MAKE) -C server valgrind-test ARGS="../configs/test1.txt" &
+	./scripts/test1.sh
 
 test2:
-
+	$(MAKE) -C server simple-run ARGS="../configs/test2.txt" &
+	./scripts/test2.sh
 
 test3:
-
+	$(MAKE) -C server simple-run ARGS="../configs/test3.txt" &
+	./scripts/test3.sh
 
 #
 # Shortcuts to run binaries

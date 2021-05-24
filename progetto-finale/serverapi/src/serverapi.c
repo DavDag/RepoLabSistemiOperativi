@@ -40,7 +40,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -56,7 +56,7 @@ int closeConnection(const char* sockname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     if (waitServerResponse() != SERVER_API_SUCCESS)
         return SERVER_API_FAILURE;
 
@@ -93,7 +93,7 @@ int openFile(const char* pathname, int flags) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -122,7 +122,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -141,7 +141,7 @@ int readNFiles(int N, const char* dirname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -170,7 +170,7 @@ int writeFile(const char* pathname, const char* dirname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -186,7 +186,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -215,7 +215,7 @@ int lockFile(const char* pathname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -244,7 +244,7 @@ int unlockFile(const char* pathname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -273,7 +273,7 @@ int closeFile(const char* pathname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -302,7 +302,7 @@ int removeFile(const char* pathname) {
     bytesWritten += bytes;
     
     // 2. Wait for server response
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return waitServerResponse();
 }
 
@@ -349,7 +349,7 @@ int waitServerResponse() {
             LOG_INFO("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {
                 const MsgFile_t file = msg.response.files[i];
-                LOG_INFO("Resp file [#%.3d]: %s | %s >> %s", i, file.filename.abs, file.filename.rel, file.content);
+                LOG_INFO("Resp file [#%.3d]: %s | %s >> %s", i, file.filename.abs.ptr, file.filename.rel.ptr, file.content.ptr);
             }
             break;
         }
@@ -358,7 +358,7 @@ int waitServerResponse() {
             break;
     }
 
-    freeMessageContent(&msg);
+    freeMessageContent(&msg, 0);
     return SERVER_API_SUCCESS;
 }
 

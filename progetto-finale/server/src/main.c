@@ -1,24 +1,17 @@
 #include <common.h>
 #include "server.h"
+#include "loader.h"
 
 int main(int argc, char** argv) {
     set_log_level(LOG_LEVEL_VERBOSE);
+    
+    // Configs file must be the first parameter
+    const char* configsFile = (argc > 1) ? argv[1] : DEFAULT_CONFIG_FILE;
 
     // Do-While just for better error handling
     do {
-        // TODO: read from file
-        ServerConfig_t configs = {
-            .socketFilame = DEFAULT_SOCK_FILE,
-            .maxClients   =  4,
-            .maxMemory_MB = 32,
-            .maxSlot      = 10,
-            .numWorkers   =  2,
-            .fsConfigs    = {
-                .tableSize           = 1024 * 1024,
-                .maxFileCapacityMB   = 10,
-                .maxFileCapacitySlot = 10,
-            },
-        };
+        // Load configs file
+        ServerConfig_t configs = readConfigs(configsFile);
 
         // Initialize server and its internal state. Must be called before anything else
         if (initializeServer(configs) != RES_OK) break;

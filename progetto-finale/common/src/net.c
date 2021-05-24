@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#define DEBUG_MESSAGES
+// #define DEBUG_MESSAGES
 
 // ======================================= DECLARATIONS: Inner functions ============================================
 
@@ -24,7 +24,7 @@ void writeToBuffer(char** buf, const void* data, size_t size);
 void readFromBuffer(char** buf, void* data, size_t size);
 
 // Converts content of 'data' from integer to char*
-void convertOffsetToPtr(char* begin, MsgPtr_t* data);
+void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull);
 
 // Converts content of 'data' from char* to integer
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
@@ -174,8 +174,8 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         case MSG_REQ_APPEND_TO_FILE:
         {
             // TODO: Update rel
-            convertOffsetToPtr(msg->raw_content, &msg->request.file.filename.abs);
-            convertOffsetToPtr(msg->raw_content, &msg->request.file.content);
+            convertOffsetToPtr(msg->raw_content, &msg->request.file.filename.abs, msg->request.file.filename.len);
+            convertOffsetToPtr(msg->raw_content, &msg->request.file.content, msg->request.file.contentLen);
             break;
         }
 
@@ -183,8 +183,8 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         {
             for (int i = 0; i < msg->response.numFiles; ++i) {
                 // TODO: Update rel
-                convertOffsetToPtr(msg->raw_content, &msg->response.files[i].filename.abs);
-                convertOffsetToPtr(msg->raw_content, &msg->response.files[i].content);
+                convertOffsetToPtr(msg->raw_content, &msg->response.files[i].filename.abs, msg->response.files[i].filename.len);
+                convertOffsetToPtr(msg->raw_content, &msg->response.files[i].content, msg->response.files[i].contentLen);
             }
             break;
         }
@@ -366,14 +366,16 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
     return msgSize;
 }
 
-void freeMessageContent(SockMessage_t* msg) {
+void freeMessageContent(SockMessage_t* msg, int deep) {
     // Release memory for allocated array
     if (msg->type == MSG_RESP_WITH_FILES) {
-        for (int i = 0; i < msg->response.numFiles; ++i) {
-            MsgFile_t file = msg->response.files[i];
-            if (file.filename.abs.ptr) free((char*) file.filename.abs.ptr);
-            if (file.content.ptr)      free((char*) file.content.ptr);
-        }
+        if (deep) {
+            for (int i = 0; i < msg->response.numFiles; ++i) {
+                MsgFile_t file = msg->response.files[i];
+                if (file.filename.abs.ptr) free((char*) file.filename.abs.ptr);
+                if (file.content.ptr)      free((char*) file.content.ptr);
+            }
+        }        
         free(msg->response.files);
     }
     
@@ -476,8 +478,8 @@ void readFromBuffer(char** buf, void* data, size_t size) {
     *buf += size;
 }
 
-void convertOffsetToPtr(char* begin, MsgPtr_t* data) {
-    data->ptr = begin + data->i;
+void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull) {
+    data->ptr = (!isNotNull) ? NULL : (begin + data->i);
 }
 
 void convertPtrToOffset(char* begin, MsgPtr_t* data) {

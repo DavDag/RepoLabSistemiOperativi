@@ -14,6 +14,10 @@
 
 #define DEBUG_LOG
 
+// To ensure the server break at certain point when using while
+#define DEPTH_LIMIT 1024*1024
+#define MAX_EJECTED_FILES_AT_SAME_TIME 1024
+
 typedef struct FSCacheEntry_t {
     ClientID owner;                   // owner of the lock (if locked, otherwise -1)
     FSFile_t file;                    // Data
@@ -34,6 +38,11 @@ static FSCacheEntry_t** gHashmap = NULL;
 static pthread_mutex_t gFSMutex  = PTHREAD_MUTEX_INITIALIZER;
 static FSCache_t gCache;
 
+// SUMMARY Data
+static int gMaxSlotUsed  = 0;
+static int gMaxBytesUsed = 0;
+static int gCacheMisses  = 0;
+
 // =============================================================================================
 
 HashValue getKey(FSFile_t);
@@ -41,6 +50,7 @@ FSCacheEntry_t* getValueFromKey(HashValue);
 void setValueForKey(HashValue, FSCacheEntry_t*);
 FSCacheEntry_t* createEmptyCacheEntry(FSFile_t);
 void moveToTop(FSCacheEntry_t*);
+void updateCacheSize(FSFile_t*, FSFile_t*, FSFile_t**, int*);
 
 void log_cache_entirely();
 
@@ -67,19 +77,31 @@ int initializeFileSystem(FSConfig_t configs) {
 
 int terminateFileSystem() {
     LOG_VERB("[#FS] Terminating file system ...");
+    LOG_INFO("[#FS] =========== SUMMARY ============");
+
+    // 
+    LOG_INFO("[#FS] Max slot used: %6d / %6d", gMaxSlotUsed, gConfigs.maxFileCapacitySlot); // SUMMARY: Max slot used
+    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), gConfigs.maxFileCapacityMB); // SUMMARY: Max MB used
+    LOG_INFO("[#FS] Cache misses : %6d", gCacheMisses); // SUMMARY: Cache misses count
+    // [#FS] 
 
     // Cache
     lock_mutex(&gFSMutex);
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
-    while (item != NULL && depth < 1024) {
+    LOG_INFO("[#FS] ============ FILES =============");
+    while (item != NULL && depth < DEPTH_LIMIT) {
         FSCacheEntry_t* tmp = item->pre;
+        //
+        LOG_INFO("[#FS] %-32s", item->file.name); // SUMMARY: Files
+        // 
         if (item->file.content) free((char*) item->file.content);
         if (item->file.name)    free((char*) item->file.name);
         free(item);
         item = tmp;
         depth++;
     }
+    LOG_INFO("[#FS] ================================");
     unlock_mutex(&gFSMutex);
 
     // Hashmap
@@ -111,6 +133,7 @@ int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFile
 
         // Update cache
         moveToTop(newEntry);
+        updateCacheSize(&file, NULL, outFiles, outFilesCount);
     } else {
         // Hash collision
         res = FS_FILE_ALREADY_EXISTS;
@@ -159,6 +182,8 @@ int fs_remove(ClientID client, FSFile_t file) {
             // Update cache
             if (gCache.head == entry) gCache.head = entry->pre;
             if (gCache.tail == entry) gCache.tail = entry->nex;
+        
+            updateCacheSize(NULL, &file, NULL, NULL);
 
             // Release memory
             if (entry->file.content) free((char*) entry->file.content);
@@ -249,17 +274,17 @@ int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFiles
         if (entry->owner != client) {
             res = FS_CLIENT_NOT_ALLOWED;
         } else {
-            // TODO: Add cache misses managment
-
             // Release memory
             if (entry->file.content) free((char*) entry->file.content);
             if (entry->file.name)    free((char*) entry->file.name);
 
             // Update file
-            entry->file = file;
+            FSFile_t oldFile = entry->file;
+            entry->file      = file;
 
             // Update cache
             moveToTop(entry);
+            updateCacheSize(&file, &oldFile, outFiles, outFilesCount);
         }
     } else {
         res = FS_FILE_NOT_EXISTS;
@@ -389,7 +414,7 @@ void log_cache_entirely(const char* const after) {
     LOG_VERB("================================");
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
-    while (item != NULL && depth < 1024) {
+    while (item != NULL && depth < DEPTH_LIMIT) {
         LOG_VERB("Ptr: %p. Owner: %+.3d Name: '%16s'. Content: '%16s'. N: %p. P: %p", item, item->owner, item->file.name, item->file.content, item->nex, item->pre);
         item = item->pre;
         depth++;
@@ -446,5 +471,70 @@ void moveToTop(FSCacheEntry_t* entry) {
         // Update cache head (if needed)
         if (gCache.head != NULL) gCache.head->nex = entry;
         gCache.head = entry;
+    }
+}
+
+void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFiles, int* ejectedFilesCount) {
+    // Update current size (MB)
+    if (newFile != NULL) gCache.bytesUsed += newFile->contentLen + newFile->nameLen;
+    if (oldFile != NULL) gCache.bytesUsed -= oldFile->contentLen + oldFile->nameLen;
+
+    // Update current size (Slot)
+    if (newFile == NULL) gCache.slotUsed--;
+    if (oldFile == NULL) gCache.slotUsed++;
+
+    // Check for size limits (MB)
+    if (gCache.bytesUsed > gCache.bytesMax) {
+        // Tmp array
+        static FSCacheEntry_t* ejectedFilesBuf[MAX_EJECTED_FILES_AT_SAME_TIME];
+        int ejectedFilesBufIndex = 0;
+
+        // Eject file until reaching a correct size
+        int depth = 0;
+        FSCacheEntry_t* item = gCache.tail;
+        while (gCache.bytesUsed > gCache.bytesMax && item != NULL && depth < DEPTH_LIMIT) {
+            FSCacheEntry_t* tmp = item->nex;
+            // Remove item from cache
+            {
+                // Update hashmap
+                HashValue key = hash_string(item->file.name, item->file.nameLen);
+                setValueForKey(key, NULL);
+
+                // Update cache
+                if (item->nex) item->nex->pre = NULL;
+                if (gCache.head == item) gCache.head = NULL;
+                
+                // Add to ejected
+                ejectedFilesBuf[ejectedFilesBufIndex++] = item;
+
+                // Remove from cache sizes
+                gCache.bytesUsed -= (item->file.nameLen + item->file.contentLen);
+                --gCache.slotUsed;
+            }
+            // 
+            item = tmp;
+            depth++;
+        }
+        // Save new tail
+        gCache.tail = item;
+
+        // Increment cache misses
+        gCacheMisses += ejectedFilesBufIndex;
+
+        // Save values and release entries memory
+        FSFile_t* files = (FSFile_t*) mem_malloc(ejectedFilesBufIndex * sizeof(FSFile_t));
+        for (int i = 0; i < ejectedFilesBufIndex; ++i) {
+            files[i] = ejectedFilesBuf[i]->file;
+            free(ejectedFilesBuf[i]);
+        }
+
+        // Pass values
+        *ejectedFilesCount = ejectedFilesBufIndex;
+        *ejectedFiles      = files;
+    }
+
+    // Check for slot limits (MB)
+    if (gCache.slotUsed > gCache.slotMax) {
+        // Eject 1 file to 
     }
 }

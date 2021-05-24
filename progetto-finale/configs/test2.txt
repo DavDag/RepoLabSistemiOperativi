@@ -1,0 +1,7 @@
+# socketFile=
+logFile=../log-test2.txt
+numWorkers=4
+maxClients=32
+maxSizeMB=1
+maxSizeSlot=10
+tableSize=BIGGEST

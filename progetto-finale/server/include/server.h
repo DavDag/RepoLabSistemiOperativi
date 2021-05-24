@@ -5,11 +5,13 @@
 
 #include "file_system.h"
 
+#define DEFAULT_LOG_FILE    "../log.txt"
+#define DEFAULT_CONFIG_FILE "../configs/default.txt"
+
 typedef struct {
-    const char* socketFilame;
+    const char* socketFilename;
+    const char* logFilename;
     int numWorkers;
-    int maxMemory_MB;
-    int maxSlot;
     int maxClients;
     FSConfig_t fsConfigs;
 } ServerConfig_t;

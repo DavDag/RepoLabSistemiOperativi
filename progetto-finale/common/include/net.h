@@ -145,7 +145,7 @@ int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* 
 /*
  * Correctly handle messages content deallocation.
  */
-void freeMessageContent(SockMessage_t* msg);
+void freeMessageContent(SockMessage_t* msg, int deep);
 
 /**
  * Read EXACLTY N bytes from the filedescriptor 'fd'
