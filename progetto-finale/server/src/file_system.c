@@ -51,6 +51,7 @@ void setValueForKey(HashValue, FSCacheEntry_t*);
 FSCacheEntry_t* createEmptyCacheEntry(FSFile_t);
 void moveToTop(FSCacheEntry_t*);
 void updateCacheSize(FSFile_t*, FSFile_t*, FSFile_t**, int*);
+void deepCopyFile(FSFile_t file, FSFile_t* outFile);
 
 void log_cache_entirely();
 
@@ -216,20 +217,8 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
     // Check if file exist
     FSCacheEntry_t* entry = getValueFromKey(key);
     if (entry != NULL) {
-        // Copy name
-        char* name = (char*) mem_malloc(entry->file.nameLen * sizeof(char));
-        memcpy(name, entry->file.name, entry->file.nameLen);
-        outFile->name    = name;
-        outFile->nameLen = entry->file.nameLen;
-
-        // Copy content
-        char* content = NULL;
-        if (entry->file.contentLen) {
-            content = (char*) mem_malloc(entry->file.contentLen * sizeof(char));
-            memcpy(content, entry->file.content, entry->file.contentLen);
-        }
-        outFile->content    = content;
-        outFile->contentLen = entry->file.contentLen;
+        // Deep copy file out
+        deepCopyFile(entry->file, outFile);
 
         // Update cache
         moveToTop(entry);
@@ -248,8 +237,68 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
     return res;
 }
 
+int __inn_sort_int_func(const void * a, const void * b) { return (*(int*)a - *(int*)b); }
+
 int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount) {
-    // TODO
+    // Acquire lock
+    lock_mutex(&gFSMutex);
+
+    // Cap n
+    if (n != 0) n = MIN(MIN(n, gCache.slotUsed), MAX_EJECTED_FILES_AT_SAME_TIME);
+
+    // Allocate files array
+    FSFile_t* files = NULL;
+    int filesIndex  = 0;
+
+    if (n == 0) {
+        // Compute min between cache size and define for max files
+        n     = MIN(gCache.slotUsed, MAX_EJECTED_FILES_AT_SAME_TIME);
+        files = (FSFile_t*) mem_malloc(n * sizeof(FSFile_t));
+
+        // Take all
+        FSCacheEntry_t* item = gCache.head;
+        while (item != NULL && filesIndex < n) {
+            deepCopyFile(item->file, &files[filesIndex++]);
+            item = item->pre;
+        }
+    } else {
+        files = (FSFile_t*) mem_malloc(n * sizeof(FSFile_t));
+
+        // Calculate n random index between 0 and cache size
+        static int indexes[MAX_EJECTED_FILES_AT_SAME_TIME];
+        int indexesIndex = 0;
+
+        // RESERVOIR METHOD
+        // th. source:
+        //    https://en.wikipedia.org/wiki/Reservoir_sampling#:~:text=Reservoir%20sampling%20is%20a%20family,to%20fit%20into%20main%20memory.
+        for (int i = 0; i < n; ++i) indexes[i] = i;
+        for (int i = n; i < gCache.slotUsed && i < MAX_EJECTED_FILES_AT_SAME_TIME; ++i) {
+            int m = rand() % (i + 1);
+            if (m < n) indexes[m] = i;
+        }
+
+        // Sort (just for easy of use)
+        qsort(indexes, n, sizeof(int), __inn_sort_int_func);
+
+        // Take only indexes from the array
+        int cacheIndex = 0;
+        FSCacheEntry_t* item = gCache.tail;
+        while (item != NULL && filesIndex < n) {
+            if (cacheIndex == indexes[indexesIndex]) {
+                deepCopyFile(item->file, &files[filesIndex++]);
+                ++indexesIndex;
+            }
+            item = item->nex;
+            ++cacheIndex;
+        }
+    }
+
+    // Pass values
+    *outFiles      = files;
+    *outFilesCount = filesIndex;
+
+    // Release lock
+    unlock_mutex(&gFSMutex);
 
     // Returns success
     return 0;
@@ -484,12 +533,12 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
     gMaxSlotUsed  = MAX(gMaxSlotUsed,  gCache.slotUsed);
     gMaxBytesUsed = MAX(gMaxBytesUsed, gCache.bytesUsed);
 
+    // Tmp array
+    static FSCacheEntry_t* ejectedFilesBuf[MAX_EJECTED_FILES_AT_SAME_TIME];
+    int ejectedFilesBufIndex = 0;
+
     // Check for size limits (MB)
     if (gCache.bytesUsed > gCache.bytesMax) {
-        // Tmp array
-        static FSCacheEntry_t* ejectedFilesBuf[MAX_EJECTED_FILES_AT_SAME_TIME];
-        int ejectedFilesBufIndex = 0;
-
         // Eject file until reaching a correct size
         int depth = 0;
         FSCacheEntry_t* item = gCache.tail;
@@ -518,7 +567,36 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         }
         // Save new tail
         gCache.tail = item;
+    }
 
+    // Check for slot limits (MB)
+    if (gCache.slotUsed > gCache.slotMax) {
+        // Eject 1 file
+        FSCacheEntry_t* item = gCache.tail;
+
+        // Update hashmap
+        HashValue key = getKey(item->file);
+        setValueForKey(key, NULL);
+
+        // Update cache
+        if (item->nex) item->nex->pre = NULL;
+        if (gCache.head == item) gCache.head = NULL;
+
+        // Save new tail
+        gCache.tail = item->nex;
+
+        ejectedFilesBufIndex = 1;
+        ejectedFilesBuf[0] = item;
+
+        // Remove from cache sizes
+        gCache.bytesUsed -= (item->file.nameLen + item->file.contentLen);
+        --gCache.slotUsed;
+
+        // Increment cache misses
+        gCacheMisses += 1;
+    }
+
+    if (ejectedFilesBufIndex) {
         // Increment cache misses
         gCacheMisses += ejectedFilesBufIndex;
 
@@ -533,9 +611,21 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         *ejectedFilesCount = ejectedFilesBufIndex;
         *ejectedFiles      = files;
     }
+}
 
-    // Check for slot limits (MB)
-    if (gCache.slotUsed > gCache.slotMax) {
-        // Eject 1 file to 
+void deepCopyFile(FSFile_t file, FSFile_t* outFile) {
+    // Copy name
+    char* name = (char*) mem_malloc(file.nameLen * sizeof(char));
+    memcpy(name, file.name, file.nameLen);
+    outFile->name    = name;
+    outFile->nameLen = file.nameLen;
+
+    // Copy content
+    char* content = NULL;
+    if (file.contentLen) {
+        content = (char*) mem_malloc(file.contentLen * sizeof(char));
+        memcpy(content, file.content, file.contentLen);
     }
+    outFile->content    = content;
+    outFile->contentLen = file.contentLen;
 }

@@ -33,7 +33,17 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     memset(&serveraddr, 0, sizeof(serveraddr));
     serveraddr.sun_family = AF_UNIX;
     strcpy(serveraddr.sun_path, sockname);
-    if (connect(gSocketFd, (struct sockaddr*) &serveraddr, sizeof(serveraddr)) < 0)
+    
+    struct timespec waitTime = { .tv_nsec = (msec % 1000) * 1000000, .tv_sec = msec / 1000 };
+    int status = 0;
+    long timeout = (abstime.tv_sec * 1000 + (abstime.tv_nsec / 1000000));
+    while (((status = connect(gSocketFd, (struct sockaddr*) &serveraddr, sizeof(serveraddr))) < 0) && timeout > 0) {
+        timeout -= msec;
+        if (nanosleep(&waitTime, NULL) < 0)
+            LOG_ERRNO("Error sleeping");
+        LOG_VERB("Retrying to connect to server...");
+    }
+    if (status < 0)
         return SERVER_API_FAILURE;
 
     // 3. Send 'MSG_REQ_OPEN_SESSION' message
@@ -44,7 +54,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     int bytes = 0;
     if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
         return SERVER_API_FAILURE;
-    bytesWritten += bytes;
+    // bytesWritten += bytes;
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
@@ -60,7 +70,7 @@ int closeConnection(const char* sockname) {
     int bytes = 0;
     if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
         return SERVER_API_FAILURE;
-    bytesWritten += bytes;
+    // bytesWritten += bytes;
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
@@ -166,16 +176,27 @@ int writeFile(const char* pathname, const char* dirname) {
     char* content  = NULL;
     int contentLen = 0;
     {
+        int res = 0;
         // Read entire file
         FILE *f = fopen(pathname, "rb");
         if (f == NULL) return SERVER_API_FAILURE;
-        fseek(f, 0, SEEK_END);
-        contentLen = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        content = malloc(contentLen + 1);
-        fread(content, 1, contentLen, f);
+        do {
+            if ((res = fseek(f, 0, SEEK_END)) != 0) break;
+            if ((contentLen = ftell(f)) < 0) {
+                res = contentLen;
+                contentLen = 0;
+                break;
+            }
+            if ((res = fseek(f, 0, SEEK_SET)) != 0) break;
+            content = (char*) mem_malloc(contentLen + 1);
+            fread(content, 1, contentLen, f);
+            content[contentLen] = '\0';
+        } while(0);
         fclose(f);
-        content[contentLen] = '\0';
+        if (res) {
+            if (content) free(content);
+            return SERVER_API_FAILURE;
+        }
     }
     
     // 2. Send 'MSG_REQ_WRITE_FILE' message
@@ -368,7 +389,7 @@ int waitServerResponse() {
         
         case MSG_RESP_SIMPLE:
         {
-            LOG_INFO("Resp status: %d", msg.response.status);
+            LOG_VERB("Resp status: %d", msg.response.status);
             if (handleServerStatus(msg.response.status) == SERVER_API_FAILURE)
                 return SERVER_API_FAILURE;
             break;
@@ -376,11 +397,11 @@ int waitServerResponse() {
 
         case MSG_RESP_WITH_FILES:
         {
-            LOG_INFO("Resp status: %d", msg.response.status);
-            LOG_INFO("Resp num files: %d", msg.response.numFiles);
+            LOG_VERB("Resp status: %d", msg.response.status);
+            LOG_VERB("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {
                 const MsgFile_t file = msg.response.files[i];
-                LOG_INFO("Resp file [#%.3d]: %s | %s >> %dB", i, file.filename.abs.ptr, file.filename.rel.ptr, file.contentLen);
+                LOG_VERB("Resp file [#%.3d]: %s | %s >> %dB", i, file.filename.abs.ptr, file.filename.rel.ptr, file.contentLen);
             }
             // TODO: Passare la dirname per il salvataggio (se necessario)
             break;

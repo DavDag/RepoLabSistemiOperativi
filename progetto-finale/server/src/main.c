@@ -3,6 +3,7 @@
 #include "loader.h"
 
 int main(int argc, char** argv) {
+    srand(time(NULL));
     set_log_level(LOG_LEVEL_VERBOSE);
     
     // Configs file must be the first parameter

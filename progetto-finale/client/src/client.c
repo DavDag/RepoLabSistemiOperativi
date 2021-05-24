@@ -142,8 +142,8 @@ int parseArguments(int argc, char** argv) {
 
 int handleOptions() {
     // Open connection
-    const struct timespec abstime = { .tv_sec = 1, .tv_nsec = 0 };
-    if (openConnection(gSocketFilename, 250, abstime) != RES_OK) {
+    const struct timespec abstime = { .tv_sec = 3, .tv_nsec = 0 };
+    if (openConnection(gSocketFilename, 1000, abstime) != RES_OK) {
         LOG_ERRNO("Error opening connection");
         return RES_ERROR;
     }
@@ -320,11 +320,11 @@ int handleOptArgument(int index) {
     const CmdLineOpt_t option = options[index];
 
     // Can access position without checking because its guaranteed from getopt that \ 1 always follows another option
-    CmdLineOpt_t lastOption = options[index - 1];
+    CmdLineOpt_t* lastOption = &options[index - 1];
 
     // Check type of lastOption
     int val = 0;
-    switch (lastOption.type)
+    switch (lastOption->type)
     {
         case OPT_READ_RAND_REQ:
         {
@@ -343,7 +343,7 @@ int handleOptArgument(int index) {
                 }
                 
                 // Set values
-                lastOption.val = val;
+                lastOption->val = val;
             } else {
                 // Should never happen
                 LOG_CRIT("Empty optional argument");

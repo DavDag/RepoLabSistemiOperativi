@@ -83,6 +83,7 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
 
 /**
  * Retrieve n random files from the filesystem.
+ * (Do not update internal cache order to avoid wrong LRU managment).
  * 
  * \param client       : client requesting the action
  * \param n            : file count
