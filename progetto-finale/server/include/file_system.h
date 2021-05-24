@@ -82,6 +82,19 @@ int fs_remove(ClientID client, FSFile_t file);
 int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
 
 /**
+ * Retrieve n random files from the filesystem.
+ * 
+ * \param client       : client requesting the action
+ * \param n            : file count
+ * \param outFiles     : ejected files
+ * \param outFilesCount: ejected files count
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ ]
+ */
+int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount);
+
+/**
  * Modify a file from the filesystem.
  * 
  * \param client       : client requesting the action

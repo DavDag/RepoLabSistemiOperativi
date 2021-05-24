@@ -29,6 +29,7 @@
 #define LOG_VERB_INTO_STREAM(stream, ...) custom_formatted_log(stream,  LOG_LEVEL_VERBOSE, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_PERR_INTO_STREAM(stream, ...) custom_formatted_log(stream,   LOG_LEVEL_PERROR, __FILE__, __LINE__, __VA_ARGS__)
 
+// NOT THREAD-SAFE
 #define LOG_EMPTY_INTO_STREAM(stream, ...) fprintf(stream, __VA_ARGS__)
 
 #define LOG_CRIT(...) LOG_CRIT_INTO_STREAM(stderr, __VA_ARGS__)
@@ -38,6 +39,8 @@
 #define LOG_VERB(...) LOG_VERB_INTO_STREAM(stdout, __VA_ARGS__)
 
 #define LOG_ERRNO(...) LOG_PERR_INTO_STREAM(stderr, __VA_ARGS__)
+
+// NOT THREAD-SAFE
 #define LOG_EMPTY(...) LOG_EMPTY_INTO_STREAM(stdout, __VA_ARGS__)
 
 static pthread_mutex_t gLogMutex = PTHREAD_MUTEX_INITIALIZER;

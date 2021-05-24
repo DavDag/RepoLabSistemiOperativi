@@ -3,6 +3,7 @@
 #ifndef SERVER_API_H
 #define SERVER_API_H
 
+#define LOG_DEBUG
 #include <common.h>
 #include <stdlib.h>
 #include <time.h>

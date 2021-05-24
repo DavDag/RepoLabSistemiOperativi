@@ -349,7 +349,7 @@ int waitServerResponse() {
             LOG_INFO("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {
                 const MsgFile_t file = msg.response.files[i];
-                LOG_INFO("Resp file [#3d]: %s | %s >> %s", file.filename.abs, file.filename.rel, file.content);
+                LOG_INFO("Resp file [#%.3d]: %s | %s >> %s", i, file.filename.abs, file.filename.rel, file.content);
             }
             break;
         }
@@ -358,6 +358,7 @@ int waitServerResponse() {
             break;
     }
 
+    freeMessageContent(&msg);
     return SERVER_API_SUCCESS;
 }
 

@@ -5,11 +5,14 @@
 #include <threads.h>
 #include <pthread.h>
 
+// #define LOG_TIMESTAMP
+// #define LOG_DEBUG
+#include <logger.h>
 #include <common.h>
 
 #define EMPTY_OWNER -1
 
-// #define DEBUG_LOG
+#define DEBUG_LOG
 
 typedef struct FSCacheEntry_t {
     ClientID owner;                   // owner of the lock (if locked, otherwise -1)
@@ -190,14 +193,19 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
     // Check if file exist
     FSCacheEntry_t* entry = getValueFromKey(key);
     if (entry != NULL) {
-        // Copy file and pass values
-        char* name    = (char*) mem_malloc(entry->file.nameLen    * sizeof(char));
-        char* content = (char*) mem_malloc(entry->file.contentLen * sizeof(char));
-        memcpy(name   , entry->file.name   , entry->file.nameLen);
-        memcpy(content, entry->file.content, entry->file.contentLen);
-        outFile->name       = name;
+        // Copy name
+        char* name = (char*) mem_malloc(entry->file.nameLen * sizeof(char));
+        memcpy(name, entry->file.name, entry->file.nameLen);
+        outFile->name    = name;
+        outFile->nameLen = entry->file.nameLen;
+
+        // Copy content
+        char* content = NULL;
+        if (entry->file.contentLen) {
+            content = (char*) mem_malloc(entry->file.contentLen * sizeof(char));
+            memcpy(content, entry->file.content, entry->file.contentLen);
+        }
         outFile->content    = content;
-        outFile->nameLen    = entry->file.nameLen;
         outFile->contentLen = entry->file.contentLen;
 
         // Update cache
@@ -215,6 +223,13 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
 
     // Returns the result
     return res;
+}
+
+int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount) {
+    // TODO
+
+    // Returns success
+    return 0;
 }
 
 int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount) {

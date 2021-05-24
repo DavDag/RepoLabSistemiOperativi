@@ -68,5 +68,5 @@ test-client-impl:
 	$(MAKE) -C client $(TARGET) ARGS="-p -r ./file1 -t 1500 -r./dir/file2,./file3" &
 	$(MAKE) -C client $(TARGET) ARGS="-p -R -t 2000 -R n=2 -d ./dir" &
 	$(MAKE) -C client $(TARGET) ARGS="-p -t 500 -l ./file1 -t 2000 -l ./file1,./dir/file2,./file3" &
-	$(MAKE) -C client $(TARGET) ARGS="-p -u ./file1 -t 1000 -u ./file1,./dir/file2,./file3"
+	$(MAKE) -C client $(TARGET) ARGS="-p -u ./file1 -t 1000 -u ./file1,./dir/file2,./file3" &
 	$(MAKE) -C client $(TARGET) ARGS="-p -L0 -L1 -L2 -L3 -L4"

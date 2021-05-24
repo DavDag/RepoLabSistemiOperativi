@@ -1,12 +1,13 @@
 #include "net.h"
 
-#include "utils.h"
+#define LOG_DEBUG
 #include "logger.h"
+#include "utils.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
-// #define DEBUG_MESSAGES
+#define DEBUG_MESSAGES
 
 // ======================================= DECLARATIONS: Inner functions ============================================
 
@@ -367,8 +368,14 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
 
 void freeMessageContent(SockMessage_t* msg) {
     // Release memory for allocated array
-    if (msg->type == MSG_RESP_WITH_FILES)
+    if (msg->type == MSG_RESP_WITH_FILES) {
+        for (int i = 0; i < msg->response.numFiles; ++i) {
+            MsgFile_t file = msg->response.files[i];
+            if (file.filename.abs.ptr) free((char*) file.filename.abs.ptr);
+            if (file.content.ptr)      free((char*) file.content.ptr);
+        }
         free(msg->response.files);
+    }
     
     // Release memory for raw content
     if (msg->raw_content != NULL)
