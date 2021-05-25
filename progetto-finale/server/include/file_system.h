@@ -12,9 +12,6 @@
 
 #include "circ_queue.h"
 
-// Syntactic sugar
-typedef int ClientID;
-
 // To communicate file's data, in/out from the "file_system"
 typedef struct {
     int nameLen;
@@ -66,7 +63,7 @@ int terminateFileSystem();
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_FILE_ALREADY_EXISTS ]
  */
-int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFiles, int* outFilesCount);
+int fs_insert(int client, FSFile_t file, int aquireLock, FSFile_t** outFiles, int* outFilesCount);
 
 /**
  * Remove a file from the filesystem.
@@ -77,7 +74,7 @@ int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFile
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int fs_remove(ClientID client, FSFile_t file);
+int fs_remove(int client, FSFile_t file);
 
 /**
  * Retrieve a file from the filesystem.
@@ -89,7 +86,7 @@ int fs_remove(ClientID client, FSFile_t file);
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_FILE_NOT_EXISTS ]
  */
-int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
+int fs_obtain(int client, FSFile_t file, FSFile_t* outFile);
 
 /**
  * Retrieve n random files from the filesystem.
@@ -103,7 +100,7 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile);
  * \retval  0: on success
  * \retval >0: on error. possible values [ ]
  */
-int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount);
+int fs_obtain_n(int client, int n, FSFile_t** outFiles, int* outFilesCount);
 
 /**
  * Modify a file from the filesystem.
@@ -116,7 +113,7 @@ int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount)
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
+int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
 /**
  * Check if file exist inside the filesystem.
@@ -127,7 +124,7 @@ int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFiles
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_FILE_NOT_EXISTS ]
  */
-int fs_exists(ClientID client, FSFile_t file);
+int fs_exists(int client, FSFile_t file);
 
 /**
  * Try taking ownership of the file.
@@ -138,7 +135,7 @@ int fs_exists(ClientID client, FSFile_t file);
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS, FS_CLIENT_WAITING_ON_LOCK ]
  */
-int fs_trylock(ClientID client, FSFile_t file);
+int fs_trylock(int client, FSFile_t file);
 
 /**
  * Release ownership of the file.
@@ -149,6 +146,6 @@ int fs_trylock(ClientID client, FSFile_t file);
  * \retval  0: on success
  * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
-int fs_unlock(ClientID client, FSFile_t file);
+int fs_unlock(int client, FSFile_t file);
 
 #endif // FILE_SYSTEM_H

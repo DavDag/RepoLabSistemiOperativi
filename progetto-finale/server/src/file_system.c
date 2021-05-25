@@ -20,7 +20,7 @@
 #define MAX_CLIENT_WAITING_ON_LOCK 8
 
 typedef struct FSCacheEntry_t {
-    ClientID owner;                   // owner of the lock (if locked, otherwise -1)
+    int owner;                   // owner of the lock (if locked, otherwise -1)
     FSFile_t file;                    // Data
     CircQueue_t* waitingLockQueue;    // Queue of clients waiting on lock
     struct FSCacheEntry_t* pre, *nex; // Ptr to previous and next entry in list
@@ -123,7 +123,7 @@ int terminateFileSystem() {
     return 0;
 }
 
-int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFiles, int* outFilesCount) {
+int fs_insert(int client, FSFile_t file, int aquireLock, FSFile_t** outFiles, int* outFilesCount) {
     // vars
     int res = 0;
 
@@ -163,7 +163,7 @@ int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFile
     return res;
 }
 
-int fs_remove(ClientID client, FSFile_t file) {
+int fs_remove(int client, FSFile_t file) {
     // vars
     int res = 0;
 
@@ -232,7 +232,7 @@ int fs_remove(ClientID client, FSFile_t file) {
     return res;
 }
 
-int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
+int fs_obtain(int client, FSFile_t file, FSFile_t* outFile) {
     // vars
     int res = 0;
 
@@ -267,7 +267,7 @@ int fs_obtain(ClientID client, FSFile_t file, FSFile_t* outFile) {
 
 int __inn_sort_int_func(const void * a, const void * b) { return (*(int*)a - *(int*)b); }
 
-int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount) {
+int fs_obtain_n(int client, int n, FSFile_t** outFiles, int* outFilesCount) {
     // Acquire lock
     lock_mutex(&gFSMutex);
 
@@ -332,7 +332,7 @@ int fs_obtain_n(ClientID client, int n, FSFile_t** outFiles, int* outFilesCount)
     return 0;
 }
 
-int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount) {
+int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount) {
     // vars
     int res = 0;
 
@@ -376,7 +376,7 @@ int fs_modify(ClientID client, FSFile_t file, FSFile_t** outFiles, int* outFiles
     return res;
 }
 
-int fs_trylock(ClientID client, FSFile_t file) {
+int fs_trylock(int client, FSFile_t file) {
     // vars
     int res = 0;
 
@@ -422,7 +422,7 @@ int fs_trylock(ClientID client, FSFile_t file) {
     return res;
 }
 
-int fs_unlock(ClientID client, FSFile_t file) {
+int fs_unlock(int client, FSFile_t file) {
     // vars
     int res = 0;
 
@@ -478,7 +478,7 @@ int fs_unlock(ClientID client, FSFile_t file) {
     return res;
 }
 
-int fs_exists(ClientID client, FSFile_t file) {
+int fs_exists(int client, FSFile_t file) {
     // vars
     int res = 0;
 
@@ -555,10 +555,10 @@ FSCacheEntry_t* createEmptyCacheEntry(FSFile_t file) {
 }
 
 void freeCacheEntry(FSCacheEntry_t* entry) {
-    if (entry->file.content)           free((char*) entry->file.content);
-    if (entry->file.name)              free((char*) entry->file.name);
-    if (entry->waitingLockQueue->data) free(entry->waitingLockQueue->data);
-    if (entry->waitingLockQueue)       free(entry->waitingLockQueue);
+    if (entry->file.content) free((char*) entry->file.content);
+    free((char*) entry->file.name);
+    free(entry->waitingLockQueue->data);
+    free(entry->waitingLockQueue);
     free(entry);
 }
 
@@ -632,7 +632,7 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         gCache.tail = item;
     }
 
-    // Check for slot limits (MB)
+    // Check for size limits (Slot)
     if (gCache.slotUsed > gCache.slotMax) {
         // Eject 1 file
         FSCacheEntry_t* item = gCache.tail;
@@ -667,6 +667,8 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         FSFile_t* files = (FSFile_t*) mem_malloc(ejectedFilesBufIndex * sizeof(FSFile_t));
         for (int i = 0; i < ejectedFilesBufIndex; ++i) {
             files[i] = ejectedFilesBuf[i]->file;
+            free(ejectedFilesBuf[i]->waitingLockQueue->data);
+            free(ejectedFilesBuf[i]->waitingLockQueue);
             free(ejectedFilesBuf[i]);
         }
 

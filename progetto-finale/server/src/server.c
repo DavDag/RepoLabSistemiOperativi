@@ -24,8 +24,9 @@
 #define RING_BUFFER_SIZE 64
 #define LOCK_QUEUE_SIZE 256
 
-#define EXIT_REQUESTED 1000 // Message sent from main thread to select thread to request to stop reading
-#define NEW_CONNECTION 1001 // Message sent from main thread to select thread to notify client connection
+#define EXIT_REQUESTED 1000 // Main => Select   : request to stop reading
+#define NEW_CONNECTION 1001 // Main => Select   : client connected
+#define SET_CONNECTION 1002 // Worker => Select : readd client
 
 // ======================================== DECLARATIONS: Types =====================================================
 
@@ -34,7 +35,6 @@ typedef struct sigaction SigAction_t;
 typedef struct sockaddr_un SocketAddress_t;
 
 typedef struct { int id; } WorkerThreadArgs_t;
-typedef struct { int fd; SockMessage_t msg; } WorkEntry_t;
 
 // ======================================== DECLARATIONS: Inner functions ===========================================
 
@@ -47,7 +47,7 @@ int spawnSideThreads();
 void* workerThreadFun(void*);
 void* selectThreadFun(void*);
 void* lockThreadFun(void*);
-SockMessage_t handleWork(int, WorkEntry_t*);
+SockMessage_t handleWork(int, int, SockMessage_t);
 void handleError(int, SockMessage_t*);
 FSFile_t copyRequestIntoFile(SockMessage_t);
 FSFile_t deepCopyRequestIntoFile(SockMessage_t);
@@ -64,13 +64,16 @@ static pthread_t gSelectThread;
 static pthread_t gLockThread;
 static ServerConfig_t gConfigs;
 static fd_set gFdSet;
-static int gMaxFd                      = -1;
 static int gSocketFd                   = -1;
+
+// Multiples write using the same pipe are guaranteed to be atomic under certain sizes (PIPE_BUF)
+// https://pubs.opengroup.org/onlinepubs/9699919799/functions/write.html#tag_16_685
 static int mainToSelectPipe[2]         = { -1, -1 };
-static CircQueue_t* gMsgQueue          = NULL;
+
+static CircQueue_t* gWorkQueue         = NULL;
+static pthread_mutex_t gWorkMutex      = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t gWorkCond        = PTHREAD_COND_INITIALIZER;
 static CircQueue_t* gLockQueue         = NULL;
-static pthread_mutex_t gCondMutex      = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t gQueueCond       = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t gLockMutex      = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gLockCond        = PTHREAD_COND_INITIALIZER;
 
@@ -93,8 +96,8 @@ int initializeServer(ServerConfig_t configs) {
     if (setupSocket() != RES_OK) return RES_ERROR;
 
     // Msg queue & Lock queue
-    gMsgQueue    = createQueue(RING_BUFFER_SIZE);
-    gLockQueue   = createQueue(LOCK_QUEUE_SIZE);
+    gWorkQueue = createQueue(RING_BUFFER_SIZE);
+    gLockQueue = createQueue(LOCK_QUEUE_SIZE);
 
     // Initialize FS
     initializeFileSystem(gConfigs.fsConfigs, gLockQueue, &gLockCond, &gLockMutex);
@@ -108,7 +111,6 @@ int initializeServer(ServerConfig_t configs) {
     // File descriptor set
     FD_ZERO(&gFdSet);
     FD_SET(mainToSelectPipe[PIPE_READ_END], &gFdSet);
-    gMaxFd = mainToSelectPipe[PIPE_READ_END];
 
     // Threads
     LOG_VERB("[#MN] Spawning threads...");
@@ -181,9 +183,9 @@ int terminateSever() {
         LOG_ERRNO("[#MN] Error joining lock thread");
 
     // Broadcast signal
-    lock_mutex(&gCondMutex);
-    notify_all(&gQueueCond);
-    unlock_mutex(&gCondMutex);
+    lock_mutex(&gWorkMutex);
+    notify_all(&gWorkCond);
+    unlock_mutex(&gWorkMutex);
     
     // Wait worker threads
     LOG_VERB("[#MN] Waiting worker threads...");
@@ -193,13 +195,9 @@ int terminateSever() {
     free(gWorkerThreads);
     free(gWorkerArgs);
 
-    // Free remaining items inside queue (if any)
-    CircQueueItemPtr_t item;
-    while (tryPop(gMsgQueue, &item) == 1) {
-        freeMessageContent(&((WorkEntry_t*) item)->msg, 1);
-    }
-    free(gMsgQueue->data);
-    free(gMsgQueue);
+    // Free work queue
+    free(gWorkQueue->data);
+    free(gWorkQueue);
 
     // Free lock queue
     free(gLockQueue->data);
@@ -307,16 +305,16 @@ void* workerThreadFun(void* args) {
         CircQueueItemPtr_t item = NULL;
 
         // Lock mutex and wait on cond (if queue is empty)
-        lock_mutex(&gCondMutex);
-        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gMsgQueue, &item)) == 0) {
+        lock_mutex(&gWorkMutex);
+        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gWorkQueue, &item)) == 0) {
             LOG_VERB("[#%.2d] waiting for work...", threadID);
             // Wait for cond
-            if ((res = pthread_cond_wait(&gQueueCond, &gCondMutex)) != 0) {
+            if ((res = pthread_cond_wait(&gWorkCond, &gWorkMutex)) != 0) {
                 errno = res;
                 LOG_ERRNO("[#%.2d] Error waiting on cond var inside worker func", threadID);
             }
         }
-        unlock_mutex(&gCondMutex);
+        unlock_mutex(&gWorkMutex);
 
         // Check if exited for signal
         if (item == NULL) {
@@ -324,47 +322,58 @@ void* workerThreadFun(void* args) {
             continue;
         }
 
-        // Message read.
-        ClientID client       = ((WorkEntry_t*) item)->fd;
-        SockMessage_t request = ((WorkEntry_t*) item)->msg;
-        LOG_VERB("[#%.2d] work received.", threadID);
+        // Get FD
+        int client = (intptr_t) item;
+
+        // Read message from client
+        SockMessage_t requestMsg;
+        if ((res = readMessage(client, _inn_buffer, innerBufferSize, &requestMsg)) < 0) {
+            LOG_ERRNO("[#SE] Error reading message");
+            continue;
+        }
+        if (res == 0) {
+            // Client disconnected !
+            if (close(client) < 0) LOG_ERRNO("[#SE] Error closing socket #%02d", client);
+            // TODO: Handle disconnection
+            LOG_VERB("[#SE] Client on FD#%02d disconnected !", client);
+            continue;
+        }
+        // Message received !
+        LOG_VERB("[#SE] Message received from FD#%0d", client);
 
         // Handle message
-        SockMessage_t response = handleWork(threadID, item);
-        if (request.type == MSG_REQ_LOCK_FILE && response.type == MSG_NONE) {
-            // Unable to lock
+        SockMessage_t responseMsg = handleWork(threadID, client, requestMsg);
+        if (requestMsg.type == MSG_REQ_LOCK_FILE && responseMsg.type == MSG_NONE) {
+            // Unable to lock.
             // Already pushed into side queue for future handling
         } else {
             LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
             // Write response to client
-            if (writeMessage(client, _inn_buffer, innerBufferSize, &response) == -1)
+            if (writeMessage(client, _inn_buffer, innerBufferSize, &responseMsg) == -1)
                 LOG_ERRNO("Error sending response");
+            // Readd descriptor to set
+            int messageToSend[2] = { SET_CONNECTION, client };
+            writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int));
         }
-
+       
         // Release resources
-        freeMessageContent(&response, 1);
-        freeMessageContent(&request, 1);
-        free(item);
+        freeMessageContent(&responseMsg, 1);
+        freeMessageContent(&requestMsg, 1);
     }
     free(_inn_buffer);
     return NULL;
 }
 
 void* selectThreadFun(void* args) {
-    char* _inn_buffer   = (char*) mem_malloc(gConfigs.maxFileSizeMB * 1024 * 1024 * sizeof(char));
-    int innerBufferSize = gConfigs.maxFileSizeMB * 1024 * 1024;
-    SockMessage_t msg;
-
     // Run until signal is received
     fd_set fds_cpy;
     int res = -1;
     while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived) {
         // Copy set of file descriptor
         fds_cpy = gFdSet;
-        errno = 0;
 
         // Select
-        if ((res = select(gMaxFd + 1, &fds_cpy, NULL, NULL, NULL)) < 0) {
+        if ((res = select(FD_SETSIZE + 1, &fds_cpy, NULL, NULL, NULL)) < 0) {
             LOG_ERRNO("[#SE] Error monitoring descriptors with pselect");
             continue; // Retry
         }
@@ -377,78 +386,61 @@ void* selectThreadFun(void* args) {
 
         // HAS PRIORITY: Check if message comes from MainThread
         if (FD_ISSET(mainToSelectPipe[PIPE_READ_END], &fds_cpy)) {
-            int message;
-
             // Read message type
-            if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0)
+            int message;
+            if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0) {
                 LOG_ERRNO("[#SE] Error reading from pipe");
+            }
             else {
-                LOG_VERB("[#SE] Message received from main: %d", message);
-
-                // Main thread received a signal, select thread should stop
+                // Check for request to exit
                 if (message == EXIT_REQUESTED) break;
 
-                // Main thread accepted a new request, add it to the set
-                else if (message == NEW_CONNECTION) {
-                    // Read file descriptor
-                    if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0)
-                        LOG_ERRNO("[#SE] Error reading new connection descriptor from pipe");
-                    else {
+                // Otherwise
+                int value;
+                readN(mainToSelectPipe[PIPE_READ_END], (char*) &value, sizeof(int));
+                
+                // Check message type
+                switch (message)
+                {
+                    case NEW_CONNECTION:
                         // Add descriptor to set
-                        FD_SET(message, &gFdSet); 
-                        gMaxFd = MAX(gMaxFd, message);
-                        LOG_VERB("[#SE] Client connected on FD#%02d !", message);
-                    }
+                        FD_SET(value, &gFdSet);
+                        LOG_VERB("[#SE] Client connected on FD#%02d !", value);
+                        break;
+                    
+                    case SET_CONNECTION:
+                        // Readd descriptor to set
+                        FD_SET(value, &gFdSet);
+                        break;
+                
+                    default:
+                        break;
                 }
             }
         }
 
         // Check for active descriptors
-        int newMaxFd = 0;
-        for(int fd = 0; fd <= gMaxFd; fd++) {
-            // Find new max
-            newMaxFd = fd;
-
+        for(int fd = 0; fd <= FD_SETSIZE; fd++) {
             // Check file descriptor
             if (FD_ISSET(fd, &fds_cpy)) {
                 // Already checked
                 if (fd == mainToSelectPipe[PIPE_READ_END]) continue;
-
-                // Read message from client
-                if ((res = readMessage(fd, _inn_buffer, innerBufferSize, &msg)) < 0 && errno != ENOMEM) {
-                    LOG_ERRNO("[#SE] Error reading message");
-                    continue;
+                
+                // Try push message into queue
+                if (tryPush(gWorkQueue, (void*) (intptr_t) fd) == 0) {
+                    LOG_WARN("[#SE] Msg queue is full. Consider upgrading its capacity. (curr = %d)", gWorkQueue->capacity);
+                    // TODO: Il client ?
                 }
-                if (res == 0 || (res == -1 && errno == ENOMEM)) {
-                    // Client disconnected !
-                    if (close(fd) < 0)
-                        LOG_ERRNO("[#SE] Error closing socket #%02d", fd);
-                    // Update fd set
-                    FD_CLR(fd, &gFdSet);                 // Remove descriptor from set
-                    newMaxFd = (fd == 0) ? 0 : (fd - 1); // Remove this descriptor from max calculation
-                    LOG_VERB("[#SE] Client on FD#%02d disconnected !", fd);
-                } else {
-                    // Message received !
-                    LOG_VERB("[#SE] Message received from FD#%0d", fd);
+                // Remove fd from set
+                FD_CLR(fd, &gFdSet);
 
-                    // try push message into queue
-                    WorkEntry_t* work = (WorkEntry_t*) mem_malloc(sizeof(WorkEntry_t));
-                    work->fd = fd;
-                    work->msg = msg;
-                    if (tryPush(gMsgQueue, work) == 0) {
-                        LOG_WARN("[#SE] Msg queue is full. Consider upgrading its capacity. (curr = %d)", gMsgQueue->capacity);
-                        free(work);
-                    }
-                    // Signal item added to queue
-                    lock_mutex(&gCondMutex);
-                    notify_one(&gQueueCond);
-                    unlock_mutex(&gCondMutex);
-                }
+                // Signal item added to queue
+                lock_mutex(&gWorkMutex);
+                notify_one(&gWorkCond);
+                unlock_mutex(&gWorkMutex);
             }
         }
-        gMaxFd = newMaxFd;
     }
-    free(_inn_buffer);
     return NULL;
 }
 
@@ -536,11 +528,8 @@ int spawnSideThreads() {
     return RES_OK;
 }
 
-SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
-    ClientID client       = work->fd;
-    SockMessage_t request = work->msg;
-
-    // Prepare response
+SockMessage_t handleWork(int workingThreadID, int client, SockMessage_t msg) {
+    // Empty response
     SockMessage_t response = {
         .uid  = UUID_new(),
         .type = MSG_RESP_SIMPLE,
@@ -553,7 +542,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
     int res            = 0;    // tmp var to handle partial results
     int outFilesCount  = 0;    // store emitted files count
     FSFile_t* outFiles = NULL; // store emitted files
-    switch (request.type)
+    switch (msg.type)
     {
         case MSG_REQ_OPEN_SESSION:
         {
@@ -586,7 +575,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
         case MSG_REQ_OPEN_FILE:
         {
             // Retrieve session
-            SessionClientID session;
+            int session;
             if ((res = getSession(client, &session)) != 0) {
                 LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
                 handleError(res, &response);
@@ -594,10 +583,10 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
             }
 
             // Check file was not opened
-            const int flags    = request.request.flags;
+            const int flags    = msg.request.flags;
             SessionFile_t file = {
-                .name = request.request.file.filename.abs.ptr,
-                .len  = request.request.file.filename.len,
+                .name = msg.request.file.filename.abs.ptr,
+                .len  = msg.request.file.filename.len,
             };
             if ((res = hasOpenedFile(session, file)) != SESSION_FILE_NEVER_OPENED) {
                 LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
@@ -609,17 +598,17 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
             int isLockRequested = flags & FLAG_LOCK;
             if (flags & FLAG_CREATE) {
                 // Create file
-                FSFile_t fs_file = deepCopyRequestIntoFile(request);
+                FSFile_t fs_file = deepCopyRequestIntoFile(msg);
                 if ((res = fs_insert(client, fs_file, isLockRequested, &outFiles, &outFilesCount)) != 0) {
                     LOG_ERRO("[#%.2d] Error creating file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
-                    if (fs_file.content) free((char*) fs_file.content); // Memory needs to be released
-                    if (fs_file.name)    free((char*) fs_file.name);    // Memory needs to be released
+                    if (fs_file.content) free((char*) fs_file.content);
+                    free((char*) fs_file.name);
                     break;
                 }
             } else if(isLockRequested) {
                 // Lock file
-                FSFile_t fs_file = copyRequestIntoFile(request);
+                FSFile_t fs_file = copyRequestIntoFile(msg);
                 if ((res = fs_trylock(client, fs_file)) != 0) {
                     // Save response as 'none' or 'empty'
                     if (res == FS_CLIENT_WAITING_ON_LOCK) {
@@ -632,7 +621,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                 }
             } else {
                 // Ensure it exists
-                FSFile_t fs_file = copyRequestIntoFile(request);
+                FSFile_t fs_file = copyRequestIntoFile(msg);
                 if ((res = fs_exists(client, fs_file)) != 0) {
                     LOG_ERRO("[#%.2d] Error opening file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
@@ -655,7 +644,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
         case MSG_REQ_CLOSE_FILE:
         {
             // Retrieve session
-            SessionClientID session;
+            int session;
             if ((res = getSession(client, &session)) != 0) {
                 LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
                 handleError(res, &response);
@@ -664,8 +653,8 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
 
             // Check file was opened
             SessionFile_t file = {
-                .name = request.request.file.filename.abs.ptr,
-                .len  = request.request.file.filename.len,
+                .name = msg.request.file.filename.abs.ptr,
+                .len  = msg.request.file.filename.len,
             };
             if ((res = hasOpenedFile(session, file)) != SESSION_FILE_ALREADY_OPENED) {
                 LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
@@ -675,7 +664,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
 
             // Close file
             // Try unlock file
-            FSFile_t fs_file = copyRequestIntoFile(request);
+            FSFile_t fs_file = copyRequestIntoFile(msg);
             // Do not handle errors. Simply unlock the file if owned. Otherwise just do nothing.
             fs_unlock(client, fs_file);
 
@@ -694,7 +683,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
         case MSG_REQ_READ_N_FILES:
         {
             // Read n files
-            const int n = request.request.flags;
+            const int n = msg.request.flags;
             if ((res = fs_obtain_n(client, n, &outFiles, &outFilesCount)) != 0) {
                 LOG_ERRO("[#%.2d] Error reading %d files for client #%.2d", workingThreadID, n, client);
                 handleError(res, &response);
@@ -714,7 +703,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
         case MSG_REQ_APPEND_TO_FILE:
         {
             // Retrieve session
-            SessionClientID session;
+            int session;
             if ((res = getSession(client, &session)) != 0) {
                 LOG_ERRO("[#%.2d] Error retrieving session for client #%.2d", workingThreadID, client);
                 handleError(res, &response);
@@ -722,10 +711,10 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
             }
 
             SessionFile_t file = {
-                .name = request.request.file.filename.abs.ptr,
-                .len  = request.request.file.filename.len,
+                .name = msg.request.file.filename.abs.ptr,
+                .len  = msg.request.file.filename.len,
             };
-            if (request.type == MSG_REQ_WRITE_FILE) {
+            if (msg.type == MSG_REQ_WRITE_FILE) {
                 // Ensure file was opened and can write into it
                 if ((res = canWriteIntoFile(session, file)) != 0) {
                     LOG_ERRO("[#%.2d] Error writing file '%s' for client #%.2d", workingThreadID, file.name, client);
@@ -742,17 +731,17 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
             }
 
             // Apply request
-            switch (request.type)
+            switch (msg.type)
             {
                 case MSG_REQ_WRITE_FILE:
                 {
                     // Write file
-                    FSFile_t fs_file = deepCopyRequestIntoFile(request);
+                    FSFile_t fs_file = deepCopyRequestIntoFile(msg);
                     if ((res = fs_modify(client, fs_file, &outFiles, &outFilesCount)) != 0) {
                         LOG_ERRO("[#%.2d] Error writing file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
-                        if (fs_file.content) free((char*) fs_file.content); // Memory needs to be released
-                        if (fs_file.name)    free((char*) fs_file.name);    // Memory needs to be released
+                        if (fs_file.content) free((char*) fs_file.content);
+                        free((char*) fs_file.name);
                         break;
                     }
                     break;
@@ -762,7 +751,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                 {
                     // Read file
                     FSFile_t outFile;
-                    FSFile_t fs_file = copyRequestIntoFile(request);
+                    FSFile_t fs_file = copyRequestIntoFile(msg);
                     if ((res = fs_obtain(client, fs_file, &outFile)) != 0) {
                         LOG_ERRO("[#%.2d] Error reading file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -778,7 +767,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                 case MSG_REQ_LOCK_FILE:
                 {
                     // Lock file
-                    FSFile_t fs_file = copyRequestIntoFile(request);
+                    FSFile_t fs_file = copyRequestIntoFile(msg);
                     if ((res = fs_trylock(client, fs_file)) != 0) {
                         // Save response as 'none' or 'empty'
                         if (res == FS_CLIENT_WAITING_ON_LOCK) {
@@ -794,7 +783,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                 case MSG_REQ_UNLOCK_FILE:
                 {
                     // Unlock file
-                    FSFile_t fs_file = copyRequestIntoFile(request);
+                    FSFile_t fs_file = copyRequestIntoFile(msg);
                     if ((res = fs_unlock(client, fs_file)) != 0) {
                         LOG_ERRO("[#%.2d] Error unlocking file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -806,7 +795,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                 case MSG_REQ_REMOVE_FILE:
                 {
                     // Remove file
-                    FSFile_t fs_file = copyRequestIntoFile(request);
+                    FSFile_t fs_file = copyRequestIntoFile(msg);
                     if ((res = fs_remove(client, fs_file)) != 0) {
                         LOG_ERRO("[#%.2d] Error removing file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
@@ -826,7 +815,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
                     break;
             }
 
-            if (request.type == MSG_REQ_REMOVE_FILE) {
+            if (msg.type == MSG_REQ_REMOVE_FILE) {
                 // Save file closed
                 if ((res = remFileOpened(session, file)) != 0) {
                     LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
@@ -836,7 +825,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
             }
 
             // LOG
-            LOG_VERB("[#%.2d] Generic request (%d) handled from client #%.2d", workingThreadID, request.type, client);
+            LOG_VERB("[#%.2d] Generic request (%d) handled from client #%.2d", workingThreadID, msg.type, client);
             break;
         }
 
@@ -846,7 +835,7 @@ SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
         default:
         {
             // LOG
-            LOG_WARN("[#%.2d] Invalid message type (%d) from client #%.2d", workingThreadID, request.type, client);
+            LOG_WARN("[#%.2d] Invalid message type (%d) from client #%.2d", workingThreadID, msg.type, client);
             response.response.status = RESP_STATUS_INVALID_ARG;
             break;
         }
@@ -933,7 +922,7 @@ FSFile_t deepCopyRequestIntoFile(SockMessage_t msg) {
     // Copy content (if any)
     int cLen = msg.request.file.contentLen;
     char* content  = (cLen) ? (char*) mem_malloc(cLen * sizeof(char)) : NULL;
-    if (cLen) memcpy(content , msg.request.file.content.ptr     , cLen * sizeof(char));
+    if (cLen) memcpy(content, msg.request.file.content.ptr, cLen * sizeof(char));
 
     // Copy data
     FSFile_t fs_file = {

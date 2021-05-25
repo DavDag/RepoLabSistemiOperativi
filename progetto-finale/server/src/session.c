@@ -26,7 +26,7 @@ int __int_ret_updating_ses(ClientSession_t* session, int returnValue);
 
 // ===============================================================================================================
 
-int createSession(ClientID client) {
+int createSession(int client) {
     // Check if client already has a session
     ClientSession_t* _inn_session = &gSessionTable[client];
     if (_inn_session->isValid)
@@ -46,7 +46,7 @@ int createSession(ClientID client) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int getSession(ClientID client, SessionClientID* session) {
+int getSession(int client, int* session) {
     // Check if client already has a session
     ClientSession_t* _inn_session = &gSessionTable[client];
     if (!_inn_session->isValid)
@@ -59,7 +59,7 @@ int getSession(ClientID client, SessionClientID* session) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int destroySession(ClientID client) {
+int destroySession(int client) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[client];
     if (!_inn_session->isValid)
@@ -75,7 +75,7 @@ int destroySession(ClientID client) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int hasOpenedFile(SessionClientID session, SessionFile_t file) {
+int hasOpenedFile(int session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
@@ -91,7 +91,7 @@ int hasOpenedFile(SessionClientID session, SessionFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int addFileOpened(SessionClientID session, SessionFile_t file, int flags) {
+int addFileOpened(int session, SessionFile_t file, int flags) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
@@ -117,7 +117,7 @@ int addFileOpened(SessionClientID session, SessionFile_t file, int flags) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
-int remFileOpened(SessionClientID session, SessionFile_t file) {
+int remFileOpened(int session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
@@ -146,7 +146,7 @@ int remFileOpened(SessionClientID session, SessionFile_t file) {
     return __int_ret_updating_ses(_inn_session, SESSION_FILE_NEVER_OPENED);
 }
 
-int canWriteIntoFile(SessionClientID session, SessionFile_t file) {
+int canWriteIntoFile(int session, SessionFile_t file) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[session];
     if (!_inn_session->isValid)
