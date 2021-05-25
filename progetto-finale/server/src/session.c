@@ -6,18 +6,6 @@
 
 // ===============================================================================================================
 
-typedef time_t timestamp_t;
-
-typedef struct {
-    int isValid;                                    // Is session valid ?
-    timestamp_t creation_time, last_operation_time; // Timestamp for creation date and last operation
-    int numFileOpened;                              // Num files opened
-    HashValue filenames[MAX_CLIENT_OPENED_FILES];   // Filename         of file i
-    int flags[MAX_CLIENT_OPENED_FILES];             // Flags at opening of file i
-} ClientSession_t;
-
-// ===============================================================================================================
-
 static ClientSession_t gSessionTable[MAX_CLIENT_COUNT];
 
 // ===============================================================================================================
@@ -59,6 +47,19 @@ int getSession(int client, int* session) {
     return __int_ret_updating_ses(_inn_session, 0);
 }
 
+int getRawSession(int client, ClientSession_t** session) {
+    // Check if client already has a session
+    ClientSession_t* _inn_session = &gSessionTable[client];
+    if (!_inn_session->isValid)
+        return SESSION_NOT_EXIST;
+    
+    // Pass value
+    *session = _inn_session;
+
+    // Returns success
+    return __int_ret_updating_ses(_inn_session, 0);
+}
+
 int destroySession(int client) {
     // Retrieve session
     ClientSession_t* _inn_session = &gSessionTable[client];
@@ -66,13 +67,13 @@ int destroySession(int client) {
         return SESSION_NOT_EXIST;
 
     // Update session
-    _inn_session->isValid = 0;
-
-    // Clear data
-    // TODO
+    _inn_session->isValid             = 0;
+    _inn_session->numFileOpened       = 0;
+    _inn_session->creation_time       = 0;
+    _inn_session->last_operation_time = 0;
 
     // Returns success
-    return __int_ret_updating_ses(_inn_session, 0);
+    return 0;
 }
 
 int hasOpenedFile(int session, SessionFile_t file) {

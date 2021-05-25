@@ -334,7 +334,14 @@ void* workerThreadFun(void* args) {
         if (res == 0) {
             // Client disconnected !
             if (close(client) < 0) LOG_ERRNO("[#SE] Error closing socket #%02d", client);
-            // TODO: Handle disconnection
+            // Handle disconnection
+            ClientSession_t* session = NULL;
+            if (getRawSession(client, &session) == 0) {
+                // Clean FS using its session
+                fs_clean(client, session);
+                // Clean session
+                destroySession(client);
+            }
             LOG_VERB("[#SE] Client on FD#%02d disconnected !", client);
             continue;
         }
@@ -560,8 +567,14 @@ SockMessage_t handleWork(int workingThreadID, int client, SockMessage_t msg) {
 
         case MSG_REQ_CLOSE_SESSION:
         {
-            // Destroy session
-            if ((res = destroySession(client)) != 0) {
+            // Handle disconnection
+            ClientSession_t* session = NULL;
+            if (getRawSession(client, &session) == 0) {
+                // Clean FS using its session
+                fs_clean(client, session);
+                // Clean session
+                destroySession(client);
+            } else  {
                 LOG_ERRO("[#%.2d] Error destroying session for client #%.2d", workingThreadID, client);
                 handleError(res, &response);
                 break;

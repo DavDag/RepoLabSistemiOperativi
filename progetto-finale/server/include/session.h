@@ -5,7 +5,7 @@
 
 #include <time.h>
 
-#include "file_system.h"
+#include <common.h>
 
 #define MAX_CLIENT_OPENED_FILES 16
 #define MAX_CLIENT_COUNT 4096
@@ -19,12 +19,22 @@
 
 typedef struct { const char* name; int len; } SessionFile_t;
 
+typedef time_t timestamp_t;
+
+typedef struct {
+    int isValid;                                    // Is session valid ?
+    timestamp_t creation_time, last_operation_time; // Timestamp for creation date and last operation
+    int numFileOpened;                              // Num files opened
+    HashValue filenames[MAX_CLIENT_OPENED_FILES];   // Filename         of file i
+    int flags[MAX_CLIENT_OPENED_FILES];             // Flags at opening of file i
+} ClientSession_t;
+
 /**
  * Create new session for client.
  * 
  * \param client: destination client
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_ALREADY_EXIST ]
  */
 int createSession(int client);
@@ -35,17 +45,28 @@ int createSession(int client);
  * \param client : destination client
  * \param session: ptr where to store result
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST ]
  */
 int getSession(int client, int* session);
+
+/**
+ * To retrieve internal data of the current user session.
+ * 
+ * \param client : session's owner
+ * \param session: where to store the ptr to the internal session
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values: [ SESSION_NOT_EXIST ]
+ */
+int getRawSession(int client, ClientSession_t** session);
 
 /**
  * Destroy session.
  * 
  * \param client: destination client
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST ]
  */
 int destroySession(int client);
@@ -69,7 +90,7 @@ int hasOpenedFile(int session, SessionFile_t file);
  * \param file   : file to add
  * \param flags  : flags (CREATE, LOCK, etc...)
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_ALREADY_OPENED, SESSION_OUT_OF_MEMORY ]
  */
 int addFileOpened(int session, SessionFile_t file, int flags);
@@ -80,7 +101,7 @@ int addFileOpened(int session, SessionFile_t file, int flags);
  * \param session: destination session
  * \param file   : file to remove
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED ]
  */
 int remFileOpened(int session, SessionFile_t file);
@@ -91,7 +112,7 @@ int remFileOpened(int session, SessionFile_t file);
  * \param session: session to check
  * \param file   : file to check
  * 
- * \retval 0 : on success
+ * \retval  0: on success
  * \retval >0: on error. possible values: [ SESSION_NOT_EXIST, SESSION_FILE_NEVER_OPENED, SESSION_CANNOT_WRITE_FILE ]
  */
 int canWriteIntoFile(int session, SessionFile_t file);

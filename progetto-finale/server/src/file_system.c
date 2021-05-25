@@ -422,62 +422,6 @@ int fs_trylock(int client, FSFile_t file) {
     return res;
 }
 
-int fs_unlock(int client, FSFile_t file) {
-    // vars
-    int res = 0;
-
-    // Get key
-    HashValue key = getKey(file);
-
-    // Acquire lock
-    lock_mutex(&gFSMutex);
-
-    // Check if file exist
-    FSCacheEntry_t* entry = getValueFromKey(key);
-    if (entry != NULL) {
-        // Check if file is owned by someone
-        if (entry->owner != client) {
-            res = FS_CLIENT_NOT_ALLOWED;
-        } else {
-            // 'Lock' file
-            entry->owner = EMPTY_OWNER;
-
-            // Get first client waiting on lock (if any)
-            CircQueueItemPtr_t item;
-            if (tryPop(entry->waitingLockQueue, &item) == 1) {
-                // Create notification to send
-                FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
-                notification->fd     = (intptr_t) item;
-                notification->status = 0; // OK
-                // Push into lock queue
-                while (tryPush(gLockQueue, notification) != 1) {
-                    // Try again fastest possible.
-                    // It blocks the entire server and needs to be done fast
-                }
-                // Signal queue
-                lock_mutex(gLockMutex);
-                notify_one(gLockCond);
-                unlock_mutex(gLockMutex);
-            }
-
-            // Update cache
-            moveToTop(entry);
-        }
-    } else {
-        res = FS_FILE_NOT_EXISTS;
-    }
-
-#ifdef DEBUG_LOG
-    log_cache_entirely("unlock");
-#endif
-
-    // Release lock
-    unlock_mutex(&gFSMutex);
-
-    // Returns the result
-    return res;
-}
-
 int fs_exists(int client, FSFile_t file) {
     // vars
     int res = 0;
@@ -506,6 +450,87 @@ int fs_exists(int client, FSFile_t file) {
 
     // Returns the result
     return res;
+}
+
+// Inner implementation of the lock to use inside clean too
+int _inner_unlock(int client, HashValue key) {
+    // Check if file exist
+    FSCacheEntry_t* entry = getValueFromKey(key);
+    if (entry != NULL) {
+        // Check if file is owned by someone
+        if (entry->owner != client) {
+            return FS_CLIENT_NOT_ALLOWED;
+        } else {
+            // 'Lock' file
+            entry->owner = EMPTY_OWNER;
+
+            // Get first client waiting on lock (if any)
+            CircQueueItemPtr_t item;
+            if (tryPop(entry->waitingLockQueue, &item) == 1) {
+                // Create notification to send
+                FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
+                notification->fd     = (intptr_t) item;
+                notification->status = 0; // OK
+                // Push into lock queue
+                while (tryPush(gLockQueue, notification) != 1) {
+                    // Try again fastest possible.
+                    // It blocks the entire server and needs to be done fast
+                }
+                // Signal queue
+                lock_mutex(gLockMutex);
+                notify_one(gLockCond);
+                unlock_mutex(gLockMutex);
+            }
+
+            // Update cache
+            moveToTop(entry);
+        }
+    } else {
+        return FS_FILE_NOT_EXISTS;
+    }
+    return 0;
+}
+
+int fs_unlock(int client, FSFile_t file) {
+    // vars
+    int res = 0;
+
+    // Get key
+    HashValue key = getKey(file);
+
+    // Acquire lock
+    lock_mutex(&gFSMutex);
+
+    res = _inner_unlock(client, key);
+
+#ifdef DEBUG_LOG
+    log_cache_entirely("unlock");
+#endif
+
+    // Release lock
+    unlock_mutex(&gFSMutex);
+
+    // Returns the result
+    return res;
+}
+
+int fs_clean(int client, ClientSession_t* session) {
+    // Acquire lock
+    lock_mutex(&gFSMutex);
+
+    // Cycle through the files left opened by the client
+    for (int i = 0; i < session->numFileOpened; ++i) {
+        HashValue key = session->filenames[i] % gConfigs.tableSize;
+        _inner_unlock(client, key);
+    }
+
+#ifdef DEBUG_LOG
+    log_cache_entirely("unlock");
+#endif
+
+    // Release lock
+    unlock_mutex(&gFSMutex);
+    return 0;
 }
 
 void log_cache_entirely(const char* const after) {

@@ -11,6 +11,7 @@
 #include <pthread.h>
 
 #include "circ_queue.h"
+#include "session.h"
 
 // To communicate file's data, in/out from the "file_system"
 typedef struct {
@@ -147,5 +148,16 @@ int fs_trylock(int client, FSFile_t file);
  * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
  */
 int fs_unlock(int client, FSFile_t file);
+
+/**
+ * Clean the user data left using its session.
+ * 
+ * \param client : destination client
+ * \param session: session data
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ ]
+ */
+int fs_clean(int client, ClientSession_t* session);
 
 #endif // FILE_SYSTEM_H
