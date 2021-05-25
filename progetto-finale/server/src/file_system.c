@@ -102,18 +102,18 @@ int terminateFileSystem() {
     lock_mutex(&gFSMutex);
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
-    LOG_INFO("[#FS] ============ FILES =============");
+    LOG_INFO("[#FS] ============================= FILES ============================");
     while (item != NULL && depth < DEPTH_LIMIT) {
         FSCacheEntry_t* tmp = item->pre;
         // SUMMARY: Files
-        LOG_INFO("[#FS] %-32s", item->file.name);
+        LOG_INFO("[#FS] %-53s %8.2fKB", item->file.name, item->file.contentLen / 1024.0f);
         // Release memory
         freeCacheEntry(item);
         item = tmp;
         depth++;
     }
     // SUMMARY
-    LOG_INFO("[#FS] ================================");
+    LOG_INFO("[#FS] ============================= FILES ============================");
     unlock_mutex(&gFSMutex);
 
     // Hashmap

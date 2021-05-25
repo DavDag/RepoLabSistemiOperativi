@@ -29,9 +29,6 @@ void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull);
 // Converts content of 'data' from char* to integer
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
 
-// Estimate raw content size
-int calcMsgRawContentOffset(SockMessage_t* msg);
-
 // ======================================= DEFINITIONS: net.h functions =============================================
 
 #ifdef DEBUG_MESSAGES
@@ -484,58 +481,4 @@ void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull) {
 
 void convertPtrToOffset(char* begin, MsgPtr_t* data) {
     data->i = data->ptr - begin; 
-}
-
-int calcMsgRawContentOffset(SockMessage_t* msg) {
-    int offset = sizeof(UUID_t) + sizeof(SockMessageType_t);
-    switch (msg->type)
-    {
-        case MSG_REQ_OPEN_SESSION:
-        case MSG_REQ_CLOSE_SESSION:
-        {
-            break;
-        }
-
-        case MSG_REQ_OPEN_FILE:
-        case MSG_REQ_CLOSE_FILE:
-        case MSG_REQ_READ_FILE:
-        case MSG_REQ_LOCK_FILE:
-        case MSG_REQ_UNLOCK_FILE:
-        case MSG_REQ_REMOVE_FILE:
-        case MSG_REQ_READ_N_FILES:
-        case MSG_REQ_WRITE_FILE:
-        case MSG_REQ_APPEND_TO_FILE:
-        {
-            // Flags
-            offset += sizeof(int);
-
-            // File
-            offset += 5 * sizeof(int);
-            break;
-        }
-
-        case MSG_RESP_SIMPLE:
-        {
-            // Status
-            offset += sizeof(RespStatus_t);
-            break;
-        }
-
-        case MSG_RESP_WITH_FILES:
-        {
-            // Status
-            offset += sizeof(RespStatus_t);
-
-            // Num files
-            offset += sizeof(int);
-
-            // Files
-            offset += 5 * msg->response.numFiles * sizeof(int);
-            break;
-        }
-
-        default:
-            break;
-    }
-    return offset;
 }

@@ -2,19 +2,22 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
 
+#define MAX_BUFFER_SIZE 32 * 1024 * 1024 // ~> 1MB
+
 static int gSocketFd   = -1;
 static char* gBuffer   = NULL;
-static int gBufferSize = MAX_FILE_SIZE;
+static int gBufferSize = MAX_BUFFER_SIZE;
 
 static size_t bytesRead    = 0;
 static size_t bytesWritten = 0;
 
-int waitServerResponse();
+int waitServerResponse(const char*);
 int handleServerStatus(RespStatus_t);
 
 int openConnection(const char* sockname, int msec, const struct timespec abstime) {
@@ -24,8 +27,8 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
 
     // 1. Allocate buffer
     if (!gBuffer) {
-        gBufferSize = MAX_FILE_SIZE;
-        gBuffer     = (char*) mem_malloc(MAX_FILE_SIZE * sizeof(char));
+        gBufferSize = MAX_BUFFER_SIZE;
+        gBuffer     = (char*) mem_malloc(MAX_BUFFER_SIZE * sizeof(char));
     }
     
     // 2. Connect to server
@@ -60,7 +63,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int closeConnection(const char* sockname) {
@@ -78,7 +81,7 @@ int closeConnection(const char* sockname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    if (waitServerResponse() != SERVER_API_SUCCESS)
+    if (waitServerResponse(NULL) != SERVER_API_SUCCESS)
         return SERVER_API_FAILURE;
 
     // 3. Close socket
@@ -124,7 +127,7 @@ int openFile(const char* pathname, int flags) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int readFile(const char* pathname, void** buf, size_t* size) {
@@ -155,7 +158,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int readNFiles(int N, const char* dirname) {
@@ -176,7 +179,7 @@ int readNFiles(int N, const char* dirname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(dirname);
 }
 
 int writeFile(const char* pathname, const char* dirname) {
@@ -186,32 +189,26 @@ int writeFile(const char* pathname, const char* dirname) {
     char* content  = NULL;
     int contentLen = 0;
     {
-        int res = 0;
         // Read entire file
-        FILE *f = fopen(pathname, "rb");
-        if (f == NULL) return SERVER_API_FAILURE;
-        do {
-            if ((res = fseek(f, 0, SEEK_END)) != 0) break;
-            if ((contentLen = ftell(f)) < 0) {
-                res = contentLen;
-                contentLen = 0;
-                break;
-            }
-            if (contentLen >= MAX_FILE_SIZE) {
-                errno = ENOMEM;
-                res = -1;
-                break;
-            }
-            if ((res = fseek(f, 0, SEEK_SET)) != 0) break;
-            content = (char*) mem_malloc(contentLen + 1);
-            fread(content, 1, contentLen, f);
-            content[contentLen] = '\0';
-        } while(0);
-        fclose(f);
-        if (res) {
-            if (content) free(content);
-            return SERVER_API_FAILURE;
-        }
+        int res = 0;
+        FILE *f = fopen(pathname, "rb");                   // Open the file
+        if (f == NULL) return SERVER_API_FAILURE;          // Ensure correct opening
+        do {                                               // Simplify error managment
+            if ((res = fseek(f, 0, SEEK_END)) != 0) break; // Set 'cursor' to EOF
+            if ((contentLen = ftell(f)) < 0) {             // Retrieve 'cursor' position
+                res = contentLen;                          // 
+                contentLen = 0;                            // 
+                break;                                     // 
+            }                                              // 
+            if ((res = fseek(f, 0, SEEK_SET)) != 0) break; // Set 'cursor' to begin of file
+            content = (char*) mem_malloc(contentLen);      // Allocate memory to read entire file
+            fread(content, sizeof(char), contentLen, f);   // Read entire file
+        } while(0);                                        // 
+        fclose(f);                                         // Close file
+        if (res) {                                         // On error
+            if (content) free(content);                    //    release content (if allocated)
+            return SERVER_API_FAILURE;                     //    return error
+        }                                                  // 
     }
     
     // 2. Send 'MSG_REQ_WRITE_FILE' message
@@ -225,7 +222,7 @@ int writeFile(const char* pathname, const char* dirname) {
                     .len = filenameLen,
                     .abs = { .ptr = pathname }
                 },
-                .contentLen = contentLen + 1,
+                .contentLen = contentLen,
                 .content = { .ptr = content }
             }
         }
@@ -241,7 +238,7 @@ int writeFile(const char* pathname, const char* dirname) {
     // 3. Wait for server response
     free(content);
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(dirname);
 }
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
@@ -259,7 +256,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(dirname);
 }
 
 int lockFile(const char* pathname) {
@@ -290,7 +287,7 @@ int lockFile(const char* pathname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int unlockFile(const char* pathname) {
@@ -321,7 +318,7 @@ int unlockFile(const char* pathname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int closeFile(const char* pathname) {
@@ -352,7 +349,7 @@ int closeFile(const char* pathname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
 int removeFile(const char* pathname) {
@@ -383,10 +380,10 @@ int removeFile(const char* pathname) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse();
+    return waitServerResponse(NULL);
 }
 
-int waitServerResponse() {
+int waitServerResponse(const char* dirname) {
     // Wait message from server
     SockMessage_t msg;
     int bytes = 0;
@@ -417,7 +414,6 @@ int waitServerResponse() {
         
         case MSG_RESP_SIMPLE:
         {
-            // LOG_VERB("Resp status: %d", msg.response.status);
             if (handleServerStatus(msg.response.status) == SERVER_API_FAILURE)
                 return SERVER_API_FAILURE;
             break;
@@ -431,7 +427,54 @@ int waitServerResponse() {
                 const MsgFile_t file = msg.response.files[i];
                 LOG_VERB("Resp file [#%.3d]: %s >> %dB", i, file.filename.abs.ptr, file.contentLen);
             }
-            // TODO: Passare la dirname per il salvataggio (se necessario)
+            if (dirname) {
+                for (int i = 0; i < msg.response.numFiles; ++i) {
+                    int contentLen        = msg.response.files[i].contentLen;
+                    const char* content   = msg.response.files[i].content.ptr;
+                    const char* pathname  = msg.response.files[i].filename.abs.ptr;
+
+                    LOG_VERB("Saving file %s into directory %s ...", pathname, dirname);
+
+                    // Calc path
+                    static char mkdirCmdPrefix[] = "mkdir -p ";
+                    static char mkdirCmd[4096];
+                    memset(mkdirCmd, 0, 4096 * sizeof(char));
+                    strcpy(mkdirCmd, mkdirCmdPrefix);
+                    strcat(mkdirCmd, dirname);
+                    strcat(mkdirCmd, "/");
+                    strcat(mkdirCmd, pathname);
+                    char* path = &mkdirCmd[9];
+                    int pathLen = strlen(path);
+
+                    // Temporary shrink string
+                    int slashIndex = 0;
+                    for (int c = pathLen - 1; c > 0; --c) {
+                        if (path[c] == '/') {
+                            path[c] = '\0';
+                            slashIndex = c;
+                            break;
+                        }
+                    }
+
+                    // Create directory
+                    system(mkdirCmd);
+                    path[slashIndex] = '/';
+
+                    // Open file
+                    FILE* file = NULL;
+                    if ((file = fopen(path, "wb")) == NULL) {
+                        LOG_ERRNO("Error opening file %s", path);
+                        continue;
+                    }
+                    
+                    // Write file
+                    if (fwrite(content, sizeof(char), contentLen, file) != contentLen)
+                        LOG_ERRNO("Error writing file %s", path);
+
+                    // Close file
+                    fclose(file);
+                }
+            }
             break;
         }
     

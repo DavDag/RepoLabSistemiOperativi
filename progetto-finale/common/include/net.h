@@ -8,8 +8,6 @@
 
 #define DEFAULT_SOCK_FILE "../cs_sock"
 
-#define MAX_FILE_SIZE 8 * 1024 * 1024 // ~> 8MB
-
 #define FLAG_EMPTY  0x00 // Empty
 #define FLAG_CREATE 0x01 // Request creation
 #define FLAG_LOCK   0x02 // Request lock
@@ -154,7 +152,7 @@ void freeMessageContent(SockMessage_t* msg, int deep);
 int readN(int fd, char* buf, size_t size);
 
 /**
- * Write EXACLTY N bytes from the filedescriptor 'fd'
+ * Write EXACLTY N bytes to the filedescriptor 'fd'
  * 
  * \retval -1: on error (errno set)
  * \retval  0: when one of the inner 'write' call returns 0

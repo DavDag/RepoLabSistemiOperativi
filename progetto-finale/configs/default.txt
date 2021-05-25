@@ -2,7 +2,7 @@
 # Path to socket file
 # Must be a valid path
 # 
-socketFile=../cs_sock
+socketFile=./cs_sock
 
 # 
 # Path to log file
@@ -26,13 +26,13 @@ maxClients=32
 # Max file size in megabytes
 # Must be a positive number
 #
-maxFileSizeMB=4
+maxFileSizeMB=64
 
 # 
 # Max filesystem capacity in megabytes
 # Must be a positive number
 # 
-maxSizeMB=50
+maxSizeMB=256
 
 # 
 # Max filesystem capacity in slots
