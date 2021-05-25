@@ -64,7 +64,8 @@ static pthread_t gSelectThread;
 static pthread_t gLockThread;
 static ServerConfig_t gConfigs;
 static fd_set gFdSet;
-static int gSocketFd                   = -1;
+static int gSocketFd = -1;
+static int gMaxFd    = 0;
 
 // Multiples write using the same pipe are guaranteed to be atomic under certain sizes (PIPE_BUF)
 // https://pubs.opengroup.org/onlinepubs/9699919799/functions/write.html#tag_16_685
@@ -111,6 +112,7 @@ int initializeServer(ServerConfig_t configs) {
     // File descriptor set
     FD_ZERO(&gFdSet);
     FD_SET(mainToSelectPipe[PIPE_READ_END], &gFdSet);
+    gMaxFd = mainToSelectPipe[PIPE_READ_END];
 
     // Threads
     LOG_VERB("[#MN] Spawning threads...");
@@ -380,7 +382,7 @@ void* selectThreadFun(void* args) {
         fds_cpy = gFdSet;
 
         // Select
-        if ((res = select(FD_SETSIZE + 1, &fds_cpy, NULL, NULL, NULL)) < 0) {
+        if ((res = select(gMaxFd + 1, &fds_cpy, NULL, NULL, NULL)) < 0) {
             LOG_ERRNO("[#SE] Error monitoring descriptors with pselect");
             continue; // Retry
         }
@@ -412,12 +414,14 @@ void* selectThreadFun(void* args) {
                     case NEW_CONNECTION:
                         // Add descriptor to set
                         FD_SET(value, &gFdSet);
+                        gMaxFd = MAX(gMaxFd, value);
                         LOG_VERB("[#SE] Client connected on FD#%02d !", value);
                         break;
                     
                     case SET_CONNECTION:
                         // Readd descriptor to set
                         FD_SET(value, &gFdSet);
+                        gMaxFd = MAX(gMaxFd, value);
                         break;
                 
                     default:
@@ -427,7 +431,8 @@ void* selectThreadFun(void* args) {
         }
 
         // Check for active descriptors
-        for(int fd = 0; fd <= FD_SETSIZE; fd++) {
+        int newMaxFD = 0;
+        for(int fd = 0; fd <= gMaxFd; fd++) {
             // Check file descriptor
             if (FD_ISSET(fd, &fds_cpy)) {
                 // Already checked
@@ -445,8 +450,13 @@ void* selectThreadFun(void* args) {
                 lock_mutex(&gWorkMutex);
                 notify_one(&gWorkCond);
                 unlock_mutex(&gWorkMutex);
+
+                // Jump last line
+                continue;
             }
+            newMaxFD = fd;
         }
+        gMaxFd = newMaxFD;
     }
     return NULL;
 }
