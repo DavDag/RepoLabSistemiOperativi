@@ -54,14 +54,10 @@ typedef enum {
  * 
  * ex:
  *   '/root/directory_1/directory_2/testfile.ext'
- *    ^                             ^
- *    |                             |
- *   ABS                           REL
  */
 typedef struct {
     int len;      // Filename's length
     MsgPtr_t abs; // Absolute name str
-    MsgPtr_t rel; // Relative name str
 } ResourcePath_t;
 
 typedef struct {

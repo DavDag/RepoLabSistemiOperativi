@@ -429,7 +429,7 @@ int waitServerResponse() {
             LOG_VERB("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {
                 const MsgFile_t file = msg.response.files[i];
-                LOG_VERB("Resp file [#%.3d]: %s | %s >> %dB", i, file.filename.abs.ptr, file.filename.rel.ptr, file.contentLen);
+                LOG_VERB("Resp file [#%.3d]: %s >> %dB", i, file.filename.abs.ptr, file.contentLen);
             }
             // TODO: Passare la dirname per il salvataggio (se necessario)
             break;
