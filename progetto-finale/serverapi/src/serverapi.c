@@ -52,8 +52,10 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
         .type = MSG_REQ_OPEN_SESSION
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     // bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -68,8 +70,10 @@ int closeConnection(const char* sockname) {
         .type = MSG_REQ_CLOSE_SESSION
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     // bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -112,8 +116,10 @@ int openFile(const char* pathname, int flags) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -141,8 +147,10 @@ int readFile(const char* pathname, void** buf, size_t* size) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -160,8 +168,10 @@ int readNFiles(int N, const char* dirname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -185,6 +195,11 @@ int writeFile(const char* pathname, const char* dirname) {
             if ((contentLen = ftell(f)) < 0) {
                 res = contentLen;
                 contentLen = 0;
+                break;
+            }
+            if (contentLen >= MAX_FILE_SIZE) {
+                errno = ENOMEM;
+                res = -1;
                 break;
             }
             if ((res = fseek(f, 0, SEEK_SET)) != 0) break;
@@ -216,8 +231,11 @@ int writeFile(const char* pathname, const char* dirname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        free(content);
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 3. Wait for server response
@@ -233,8 +251,10 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
         .type = MSG_NONE
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -262,8 +282,10 @@ int lockFile(const char* pathname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -291,8 +313,10 @@ int unlockFile(const char* pathname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -320,8 +344,10 @@ int closeFile(const char* pathname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -349,8 +375,10 @@ int removeFile(const char* pathname) {
         }
     };
     int bytes = 0;
-    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0)
+    if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
+    }
     bytesWritten += bytes;
     
     // 2. Wait for server response
@@ -389,7 +417,7 @@ int waitServerResponse() {
         
         case MSG_RESP_SIMPLE:
         {
-            LOG_VERB("Resp status: %d", msg.response.status);
+            // LOG_VERB("Resp status: %d", msg.response.status);
             if (handleServerStatus(msg.response.status) == SERVER_API_FAILURE)
                 return SERVER_API_FAILURE;
             break;

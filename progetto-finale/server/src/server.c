@@ -1,3 +1,5 @@
+#include "server.h"
+
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
@@ -12,7 +14,6 @@
 #include <logger.h>
 #include <common.h>
 
-#include "server.h"
 #include "circ_queue.h"
 #include "file_system.h"
 #include "session.h"
@@ -21,6 +22,7 @@
 #define PIPE_WRITE_END 1
 
 #define RING_BUFFER_SIZE 64
+#define LOCK_QUEUE_SIZE 256
 
 #define EXIT_REQUESTED 1000 // Message sent from main thread to select thread to request to stop reading
 #define NEW_CONNECTION 1001 // Message sent from main thread to select thread to notify client connection
@@ -41,13 +43,14 @@ void setupSignals();
 int setupSocket();
 void cleanup();
 int spawnWorkers();
-void* workerThreadFun();
-int spawnThreadForSelect();
-void* selectThreadFun();
-SockMessage_t handleWork(int, ClientID, SockMessage_t);
+int spawnSideThreads();
+void* workerThreadFun(void*);
+void* selectThreadFun(void*);
+void* lockThreadFun(void*);
+SockMessage_t handleWork(int, WorkEntry_t*);
 void handleError(int, SockMessage_t*);
-FSFile_t copyRequestIntoFile(SockMessage_t msg);
-FSFile_t deepCopyRequestIntoFile(SockMessage_t msg);
+FSFile_t copyRequestIntoFile(SockMessage_t);
+FSFile_t deepCopyRequestIntoFile(SockMessage_t);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -58,14 +61,18 @@ volatile sig_atomic_t gSigHupReceived  = 0;
 static WorkerThreadArgs_t* gWorkerArgs = NULL;
 static pthread_t* gWorkerThreads       = NULL;
 static pthread_t gSelectThread;
+static pthread_t gLockThread;
 static ServerConfig_t gConfigs;
 static fd_set gFdSet;
 static int gMaxFd                      = -1;
 static int gSocketFd                   = -1;
 static int mainToSelectPipe[2]         = { -1, -1 };
 static CircQueue_t* gMsgQueue          = NULL;
+static CircQueue_t* gLockQueue         = NULL;
 static pthread_mutex_t gCondMutex      = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gQueueCond       = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t gLockMutex      = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t gLockCond        = PTHREAD_COND_INITIALIZER;
 
 // ======================================= DEFINITIONS: client.h functions ==========================================
 
@@ -85,11 +92,12 @@ int initializeServer(ServerConfig_t configs) {
     // Socket
     if (setupSocket() != RES_OK) return RES_ERROR;
 
-    // Msg queue
-    gMsgQueue = createQueue(RING_BUFFER_SIZE);
+    // Msg queue & Lock queue
+    gMsgQueue    = createQueue(RING_BUFFER_SIZE);
+    gLockQueue   = createQueue(LOCK_QUEUE_SIZE);
 
     // Initialize FS
-    initializeFileSystem(gConfigs.fsConfigs);
+    initializeFileSystem(gConfigs.fsConfigs, gLockQueue, &gLockCond, &gLockMutex);
 
     // Pipe MainThread -> SelectThread
     if (pipe(mainToSelectPipe) < 0) {
@@ -104,8 +112,8 @@ int initializeServer(ServerConfig_t configs) {
 
     // Threads
     LOG_VERB("[#MN] Spawning threads...");
-    if (spawnWorkers() != RES_OK) return RES_ERROR;
-    if (spawnThreadForSelect() != RES_OK) return RES_ERROR;
+    if (spawnWorkers() != RES_OK)     return RES_ERROR;
+    if (spawnSideThreads() != RES_OK) return RES_ERROR;
 
     // Return success
     return RES_OK;
@@ -162,6 +170,16 @@ int terminateSever() {
     if (pthread_join(gSelectThread, NULL) < 0)
         LOG_ERRNO("[#MN] Error joining select thread");
 
+    // Signal lock thread
+    lock_mutex(&gLockMutex);
+    notify_all(&gLockCond);
+    unlock_mutex(&gLockMutex);
+    
+    // Wait lock thread
+    LOG_VERB("[#MN] Waiting lock thread...");
+    if (pthread_join(gLockThread, NULL) < 0)
+        LOG_ERRNO("[#MN] Error joining lock thread");
+
     // Broadcast signal
     lock_mutex(&gCondMutex);
     notify_all(&gQueueCond);
@@ -182,6 +200,10 @@ int terminateSever() {
     }
     free(gMsgQueue->data);
     free(gMsgQueue);
+
+    // Free lock queue
+    free(gLockQueue->data);
+    free(gLockQueue);
 
     // Close FS & Log execution summary
     terminateFileSystem();
@@ -273,8 +295,8 @@ void cleanup() {
 
 void* workerThreadFun(void* args) {
     // vars
-    char* _inn_buffer   = (char*) mem_malloc(MAX_FILE_SIZE * sizeof(char));
-    int innerBufferSize = MAX_FILE_SIZE;
+    char* _inn_buffer   = (char*) mem_malloc(gConfigs.maxFileSizeMB * 1024 * 1024 * sizeof(char));
+    int innerBufferSize = gConfigs.maxFileSizeMB * 1024 * 1024;
     const int threadID  = ((WorkerThreadArgs_t*) args)->id;
     int res = 0;
 
@@ -296,40 +318,42 @@ void* workerThreadFun(void* args) {
         }
         unlock_mutex(&gCondMutex);
 
-        // Has exited from above loop so item should contains a message
-        // Double check to ensure correct behaviour
+        // Check if exited for signal
         if (item == NULL) {
             LOG_VERB("[#%.2d] Queue empty", threadID);
             continue;
         }
 
         // Message read.
-        ClientID client       = ((WorkEntry_t*) (item))->fd;
-        SockMessage_t request = ((WorkEntry_t*) (item))->msg;
+        ClientID client       = ((WorkEntry_t*) item)->fd;
+        SockMessage_t request = ((WorkEntry_t*) item)->msg;
         LOG_VERB("[#%.2d] work received.", threadID);
 
         // Handle message
-        SockMessage_t response = handleWork(threadID, client, request);
-        LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
+        SockMessage_t response = handleWork(threadID, item);
+        if (request.type == MSG_REQ_LOCK_FILE && response.type == MSG_NONE) {
+            // Unable to lock
+            // Already pushed into side queue for future handling
+        } else {
+            LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
+            // Write response to client
+            if (writeMessage(client, _inn_buffer, innerBufferSize, &response) == -1)
+                LOG_ERRNO("Error sending response");
+        }
 
-        // Write response to client
-        if (writeMessage(client, _inn_buffer, innerBufferSize, &response) == -1)
-            LOG_ERRNO("Error sending response");
-
-        // Release resources        
-        freeMessageContent(&request, 1);
+        // Release resources
         freeMessageContent(&response, 1);
+        freeMessageContent(&request, 1);
+        free(item);
     }
     free(_inn_buffer);
     return NULL;
 }
 
 void* selectThreadFun(void* args) {
-    char* _inn_buffer   = (char*) mem_malloc(MAX_FILE_SIZE * sizeof(char));
-    int innerBufferSize = MAX_FILE_SIZE;
+    char* _inn_buffer   = (char*) mem_malloc(gConfigs.maxFileSizeMB * 1024 * 1024 * sizeof(char));
+    int innerBufferSize = gConfigs.maxFileSizeMB * 1024 * 1024;
     SockMessage_t msg;
-    WorkEntry_t works[RING_BUFFER_SIZE * RING_BUFFER_SIZE];
-    int bufferIndex     = 0;
 
     // Run until signal is received
     fd_set fds_cpy;
@@ -370,8 +394,9 @@ void* selectThreadFun(void* args) {
                     if ((res = readN(mainToSelectPipe[PIPE_READ_END], (char*) &message, sizeof(int))) < 0)
                         LOG_ERRNO("[#SE] Error reading new connection descriptor from pipe");
                     else {
-                        FD_SET(message, &gFdSet);      // Add descriptor to set
-                        gMaxFd = MAX(gMaxFd, message); // Update max
+                        // Add descriptor to set
+                        FD_SET(message, &gFdSet); 
+                        gMaxFd = MAX(gMaxFd, message);
                         LOG_VERB("[#SE] Client connected on FD#%02d !", message);
                     }
                 }
@@ -390,11 +415,11 @@ void* selectThreadFun(void* args) {
                 if (fd == mainToSelectPipe[PIPE_READ_END]) continue;
 
                 // Read message from client
-                if ((res = readMessage(fd, _inn_buffer, innerBufferSize, &msg)) < 0) {
+                if ((res = readMessage(fd, _inn_buffer, innerBufferSize, &msg)) < 0 && errno != ENOMEM) {
                     LOG_ERRNO("[#SE] Error reading message");
                     continue;
                 }
-                if (res == 0) {
+                if (res == 0 || (res == -1 && errno == ENOMEM)) {
                     // Client disconnected !
                     if (close(fd) < 0)
                         LOG_ERRNO("[#SE] Error closing socket #%02d", fd);
@@ -405,14 +430,14 @@ void* selectThreadFun(void* args) {
                 } else {
                     // Message received !
                     LOG_VERB("[#SE] Message received from FD#%0d", fd);
+
                     // try push message into queue
-                    WorkEntry_t* work = &works[bufferIndex];
+                    WorkEntry_t* work = (WorkEntry_t*) mem_malloc(sizeof(WorkEntry_t));
                     work->fd = fd;
                     work->msg = msg;
-                    if (tryPush(gMsgQueue, work) == 0)
+                    if (tryPush(gMsgQueue, work) == 0) {
                         LOG_WARN("[#SE] Msg queue is full. Consider upgrading its capacity. (curr = %d)", gMsgQueue->capacity);
-                    else {
-                        bufferIndex = (bufferIndex + 1) % RING_BUFFER_SIZE;                        
+                        free(work);
                     }
                     // Signal item added to queue
                     lock_mutex(&gCondMutex);
@@ -427,13 +452,71 @@ void* selectThreadFun(void* args) {
     return NULL;
 }
 
+void* lockThreadFun(void* args) {
+    // vars
+    char _inn_buff[1024]; // Can be fixed because responses are always the same
+    int res = 0;
+    SockMessage_t msg;
+
+    // Stop working when SIGINT / SIGQUIT received and on SIGHUP when queue is empty
+    int hasFoundItem = 0;
+    while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && hasFoundItem)) {
+        // Reset item
+        CircQueueItemPtr_t item = NULL;
+
+        // Lock mutex and wait on cond (if queue is empty)
+        lock_mutex(&gLockMutex);
+        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gLockQueue, &item)) == 0) {
+            LOG_VERB("[#LK] waiting for work...");
+            // Wait for cond
+            if ((res = pthread_cond_wait(&gLockCond, &gLockMutex)) != 0) {
+                errno = res;
+                LOG_ERRNO("[#LK] Error waiting on cond var inside lock thread func");
+            }
+        }
+        unlock_mutex(&gLockMutex);
+
+        // Check if exited for signal
+        if (item == NULL) {
+            LOG_VERB("[#LK] Queue empty");
+            continue;
+        }
+
+        // Someone unlocked a file that was locked by this client
+        // and the file_system automatically locked it for him, notifying
+        // the queue this thread is waiting for to send response to client.
+        FSLockNotification_t notification = *((FSLockNotification_t*) item);
+
+        // Empty response
+        msg = (SockMessage_t) {
+            .uid  = UUID_new(),
+            .type = MSG_RESP_SIMPLE,
+            .response = {
+                .status = RESP_STATUS_OK
+            }
+        };
+
+        // Handle error (if any)
+        handleError(notification.status, &msg);
+
+        // Write response to client
+        LOG_VERB("[#LK] work completed. Sending response...");
+        if (writeMessage(notification.fd, _inn_buff, 1024, &msg) == -1)
+            LOG_ERRNO("Error sending response");
+
+        // Release memory
+        free(item);
+    }
+    return NULL;
+}
+
 int spawnWorkers() {
     gWorkerArgs    = (WorkerThreadArgs_t*) mem_malloc(gConfigs.numWorkers * sizeof(WorkerThreadArgs_t));
     gWorkerThreads = (pthread_t*) mem_malloc(gConfigs.numWorkers * sizeof(pthread_t));
     for (int i = 0; i < gConfigs.numWorkers; ++i) {
         gWorkerArgs[i].id = i;
         if (pthread_create(&gWorkerThreads[i], NULL, workerThreadFun, &gWorkerArgs[i]) < 0) {
-            LOG_ERRNO("[#MN] Creating worker thread");
+            LOG_ERRNO("[#MN] Error creating worker thread");
             LOG_CRIT("[#MN] Unable to start worker thread #%d", i + 1);
             return RES_ERROR;
         }
@@ -441,15 +524,22 @@ int spawnWorkers() {
     return RES_OK;
 }
 
-int spawnThreadForSelect() {
+int spawnSideThreads() {
     if (pthread_create(&gSelectThread, NULL, selectThreadFun, NULL) < 0) {
-        LOG_ERRNO("[#MN] Creating select thread");
+        LOG_ERRNO("[#MN] Error creating select thread");
+        return RES_ERROR;
+    }
+    if (pthread_create(&gLockThread, NULL, lockThreadFun, NULL) < 0) {
+        LOG_ERRNO("[#MN] Error creating lock thread");
         return RES_ERROR;
     }
     return RES_OK;
 }
 
-SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t request) {
+SockMessage_t handleWork(int workingThreadID, WorkEntry_t* work) {
+    ClientID client       = work->fd;
+    SockMessage_t request = work->msg;
+
     // Prepare response
     SockMessage_t response = {
         .uid  = UUID_new(),
@@ -531,6 +621,11 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                 // Lock file
                 FSFile_t fs_file = copyRequestIntoFile(request);
                 if ((res = fs_trylock(client, fs_file)) != 0) {
+                    // Save response as 'none' or 'empty'
+                    if (res == FS_CLIENT_WAITING_ON_LOCK) {
+                        response.type = MSG_NONE;
+                        break;
+                    }
                     LOG_ERRO("[#%.2d] Error locking file '%s' for client #%.2d", workingThreadID, file.name, client);
                     handleError(res, &response);
                     break;
@@ -685,13 +780,13 @@ SockMessage_t handleWork(int workingThreadID, ClientID client, SockMessage_t req
                     // Lock file
                     FSFile_t fs_file = copyRequestIntoFile(request);
                     if ((res = fs_trylock(client, fs_file)) != 0) {
-                        // TODO:
-                        // 
-                        // if (res == FS_CLIENT_NOT_ALLOWED) pushIntoSideQueue()
-                        // 
+                        // Save response as 'none' or 'empty'
+                        if (res == FS_CLIENT_WAITING_ON_LOCK) {
+                            response.type = MSG_NONE;
+                            break;
+                        }
                         LOG_ERRO("[#%.2d] Error locking file '%s' for client #%.2d", workingThreadID, file.name, client);
                         handleError(res, &response);
-                        break;
                     }
                     break;
                 }

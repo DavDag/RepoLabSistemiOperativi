@@ -17,10 +17,12 @@
 // To ensure the server break at certain point when using while
 #define DEPTH_LIMIT 1024*1024
 #define MAX_EJECTED_FILES_AT_SAME_TIME 1024
+#define MAX_CLIENT_WAITING_ON_LOCK 8
 
 typedef struct FSCacheEntry_t {
     ClientID owner;                   // owner of the lock (if locked, otherwise -1)
     FSFile_t file;                    // Data
+    CircQueue_t* waitingLockQueue;    // Queue of clients waiting on lock
     struct FSCacheEntry_t* pre, *nex; // Ptr to previous and next entry in list
 } FSCacheEntry_t;
 
@@ -34,9 +36,12 @@ typedef struct {
 // =============================================================================================
 
 static FSConfig_t gConfigs;
-static FSCacheEntry_t** gHashmap = NULL;
-static pthread_mutex_t gFSMutex  = PTHREAD_MUTEX_INITIALIZER;
+static FSCacheEntry_t** gHashmap   = NULL;
+static pthread_mutex_t gFSMutex    = PTHREAD_MUTEX_INITIALIZER;
 static FSCache_t gCache;
+static CircQueue_t* gLockQueue     = NULL;
+static pthread_cond_t* gLockCond   = NULL;
+static pthread_mutex_t* gLockMutex = NULL;
 
 // SUMMARY Data
 static int gMaxSlotUsed  = 0;
@@ -49,15 +54,16 @@ HashValue getKey(FSFile_t);
 FSCacheEntry_t* getValueFromKey(HashValue);
 void setValueForKey(HashValue, FSCacheEntry_t*);
 FSCacheEntry_t* createEmptyCacheEntry(FSFile_t);
+void freeCacheEntry(FSCacheEntry_t*);
 void moveToTop(FSCacheEntry_t*);
 void updateCacheSize(FSFile_t*, FSFile_t*, FSFile_t**, int*);
-void deepCopyFile(FSFile_t file, FSFile_t* outFile);
+void deepCopyFile(FSFile_t, FSFile_t*);
 
 void log_cache_entirely();
 
 // =============================================================================================
 
-int initializeFileSystem(FSConfig_t configs) {
+int initializeFileSystem(FSConfig_t configs, CircQueue_t* lockQueue, pthread_cond_t* lockCond, pthread_mutex_t* lockMutex) {
     LOG_VERB("[#FS] Initializing file system ...");
     gConfigs = configs;
 
@@ -72,19 +78,25 @@ int initializeFileSystem(FSConfig_t configs) {
     // Hashmap
     gHashmap = (FSCacheEntry_t**) mem_calloc(gConfigs.tableSize, sizeof(FSCacheEntry_t*));
 
+    // Lock queue & cond
+    gLockCond  = lockCond;
+    gLockQueue = lockQueue;
+    gLockMutex = lockMutex;
+
     // Returns success
     return 0;
 }
 
 int terminateFileSystem() {
     LOG_VERB("[#FS] Terminating file system ...");
+    // SUMMARY
     LOG_INFO("[#FS] =========== SUMMARY ============");
-
-    // 
-    LOG_INFO("[#FS] Max slot used: %6d / %6d", gMaxSlotUsed, gConfigs.maxFileCapacitySlot); // SUMMARY: Max slot used
-    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), ((float) gConfigs.maxFileCapacityMB)); // SUMMARY: Max MB used
-    LOG_INFO("[#FS] Cache misses : %6d", gCacheMisses); // SUMMARY: Cache misses count
-    // [#FS] 
+    // SUMMARY: Max slot used
+    LOG_INFO("[#FS] Max slot used: %6d / %6d", gMaxSlotUsed, gConfigs.maxFileCapacitySlot);
+    // SUMMARY: Max MB used
+    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), ((float) gConfigs.maxFileCapacityMB));
+    // SUMMARY: Cache misses count
+    LOG_INFO("[#FS] Cache misses : %6d", gCacheMisses);
 
     // Cache
     lock_mutex(&gFSMutex);
@@ -93,15 +105,14 @@ int terminateFileSystem() {
     LOG_INFO("[#FS] ============ FILES =============");
     while (item != NULL && depth < DEPTH_LIMIT) {
         FSCacheEntry_t* tmp = item->pre;
-        //
-        LOG_INFO("[#FS] %-32s", item->file.name); // SUMMARY: Files
-        // 
-        if (item->file.content) free((char*) item->file.content);
-        if (item->file.name)    free((char*) item->file.name);
-        free(item);
+        // SUMMARY: Files
+        LOG_INFO("[#FS] %-32s", item->file.name);
+        // Release memory
+        freeCacheEntry(item);
         item = tmp;
         depth++;
     }
+    // SUMMARY
     LOG_INFO("[#FS] ================================");
     unlock_mutex(&gFSMutex);
 
@@ -146,8 +157,8 @@ int fs_insert(ClientID client, FSFile_t file, int aquireLock, FSFile_t** outFile
     unlock_mutex(&gFSMutex);
 
     // Check if any error occurred
-    if (res != 0) free(newEntry);
-
+    if (res != 0) freeCacheEntry(newEntry);
+    
     // Returns the result
     return res;
 }
@@ -181,13 +192,30 @@ int fs_remove(ClientID client, FSFile_t file) {
             // Update cache
             if (gCache.head == entry) gCache.head = entry->pre;
             if (gCache.tail == entry) gCache.tail = entry->nex;
-        
+
+            // Notify all clients waiting for lock
+            CircQueueItemPtr_t item;
+            while (tryPop(entry->waitingLockQueue, &item) == 1) {
+                // Create notification to send
+                FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
+                notification->fd     = (intptr_t) item;
+                notification->status = FS_FILE_NOT_EXISTS; // File has been removed
+                // Push into lock queue
+                while (tryPush(gLockQueue, notification) != 1) {
+                    // Try again fastest possible.
+                    // It blocks the entire server and needs to be done fast
+                }
+            }
+            // Signal queue
+            lock_mutex(gLockMutex);
+            notify_one(gLockCond);
+            unlock_mutex(gLockMutex);
+
+            // Update cache
             updateCacheSize(NULL, &file, NULL, NULL);
 
             // Release memory
-            if (entry->file.content) free((char*) entry->file.content);
-            if (entry->file.name)    free((char*) entry->file.name);
-            free(entry);
+            freeCacheEntry(entry);
         }
     } else {
         res = FS_FILE_NOT_EXISTS;
@@ -363,7 +391,15 @@ int fs_trylock(ClientID client, FSFile_t file) {
     if (entry != NULL) {
         // Check if file is owned by someone
         if (entry->owner != EMPTY_OWNER && entry->owner != client) {
-            res = FS_CLIENT_NOT_ALLOWED;
+            // Try push into relative queue
+            if (tryPush(entry->waitingLockQueue, (void*) (intptr_t) client) == 1) {
+                // Successfully pushed into queue
+                res = FS_CLIENT_WAITING_ON_LOCK;
+            }
+            else {
+                // Queue may be full
+                res = FS_CLIENT_NOT_ALLOWED;
+            }
         } else {
             // 'Lock' file
             entry->owner = client;
@@ -405,6 +441,24 @@ int fs_unlock(ClientID client, FSFile_t file) {
         } else {
             // 'Lock' file
             entry->owner = EMPTY_OWNER;
+
+            // Get first client waiting on lock (if any)
+            CircQueueItemPtr_t item;
+            if (tryPop(entry->waitingLockQueue, &item) == 1) {
+                // Create notification to send
+                FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
+                notification->fd     = (intptr_t) item;
+                notification->status = 0; // OK
+                // Push into lock queue
+                while (tryPush(gLockQueue, notification) != 1) {
+                    // Try again fastest possible.
+                    // It blocks the entire server and needs to be done fast
+                }
+                // Signal queue
+                lock_mutex(gLockMutex);
+                notify_one(gLockCond);
+                unlock_mutex(gLockMutex);
+            }
 
             // Update cache
             moveToTop(entry);
@@ -485,11 +539,12 @@ void setValueForKey(HashValue key, FSCacheEntry_t* value) {
 
 FSCacheEntry_t* createEmptyCacheEntry(FSFile_t file) {
     // Create empty entry
-    FSCacheEntry_t* entry = (FSCacheEntry_t*) mem_malloc(sizeof(FSCacheEntry_t));
-    entry->file  = file;
-    entry->nex   = NULL;
-    entry->pre   = NULL;
-    entry->owner = EMPTY_OWNER;
+    FSCacheEntry_t* entry   = (FSCacheEntry_t*) mem_malloc(sizeof(FSCacheEntry_t));
+    entry->file             = file;
+    entry->nex              = NULL;
+    entry->pre              = NULL;
+    entry->owner            = EMPTY_OWNER;
+    entry->waitingLockQueue = createQueue(MAX_CLIENT_WAITING_ON_LOCK);
 
 #ifdef DEBUG_LOG
     LOG_VERB("NEW ENTRY %p FOR CACHE: %d %s", entry, entry->file.nameLen, entry->file.name);
@@ -497,6 +552,14 @@ FSCacheEntry_t* createEmptyCacheEntry(FSFile_t file) {
 
     // Returns the entry
     return entry;
+}
+
+void freeCacheEntry(FSCacheEntry_t* entry) {
+    if (entry->file.content)           free((char*) entry->file.content);
+    if (entry->file.name)              free((char*) entry->file.name);
+    if (entry->waitingLockQueue->data) free(entry->waitingLockQueue->data);
+    if (entry->waitingLockQueue)       free(entry->waitingLockQueue);
+    free(entry);
 }
 
 void moveToTop(FSCacheEntry_t* entry) {

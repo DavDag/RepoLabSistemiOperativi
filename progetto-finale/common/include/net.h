@@ -138,9 +138,8 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  * \param bufferSize: buffer size
  * \param msg       : ptr to the source message
  * 
- * \retval -1: on error (errno set)
- * \retval  0: on EOF (connection closed)
- * \retval >0: on success
+ * \retval  -1: on error (errno set)
+ * \retval >=0: on success
  */
 int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
 

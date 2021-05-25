@@ -567,10 +567,7 @@ int handleOption(int index) {
                     if ((status = lockFile(pathname)) == SERVER_API_FAILURE)
                         LOG_ERRNO("Error locking file '%s'", pathname);
                     // [3]
-                    if (closeFile(pathname) == SERVER_API_FAILURE) {
-                        LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_FAILURE;
-                    }
+                    // Do not close
                 } else {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
@@ -595,17 +592,15 @@ int handleOption(int index) {
                 char* pathname = option.files[i];
 
                 // [1]
-                if ((status = openFile(pathname, FLAG_EMPTY)) == SERVER_API_SUCCESS) {
-                    // [2]
-                    if ((status = unlockFile(pathname)) == SERVER_API_FAILURE)
-                        LOG_ERRNO("Error locking file '%s'", pathname);
-                    // [3]
-                    if (closeFile(pathname) == SERVER_API_FAILURE) {
-                        LOG_ERRNO("Error closing file '%s'", pathname);
-                        status = SERVER_API_FAILURE;
-                    }
-                } else {
-                    LOG_ERRNO("Error opening file '%s'", pathname);
+                // Do not open
+
+                // [2]
+                if ((status = unlockFile(pathname)) == SERVER_API_FAILURE)
+                    LOG_ERRNO("Error locking file '%s'", pathname);
+                // [3]
+                if (closeFile(pathname) == SERVER_API_FAILURE) {
+                    LOG_ERRNO("Error closing file '%s'", pathname);
+                    status = SERVER_API_FAILURE;
                 }
 
                 // [4]

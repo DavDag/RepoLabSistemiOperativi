@@ -25,13 +25,14 @@
 static ServerConfig_t readConfigs(const char* filename) {
     // Static values (not added globally to hide them)
     // Option names
-    static const char* const OPT_SOCKFILE   = "socketFile";
-    static const char* const OPT_LOGFILE    = "logFile";
-    static const char* const OPT_NUMWORKERS = "numWorkers";
-    static const char* const OPT_MAXCLIENTS = "maxClients";
-    static const char* const OPT_MAXSIZEMB  = "maxSizeMB";
-    static const char* const OPT_MAXSLOT    = "maxSizeSlot";
-    static const char* const OPT_TABLESIZE  = "tableSize";
+    static const char* const OPT_SOCKFILE     = "socketFile";
+    static const char* const OPT_LOGFILE      = "logFile";
+    static const char* const OPT_NUMWORKERS   = "numWorkers";
+    static const char* const OPT_MAXCLIENTS   = "maxClients";
+    static const char* const OPT_MAXSIZEMB    = "maxSizeMB";
+    static const char* const OPT_MAXSLOTCOUNT = "maxSizeSlot";
+    static const char* const OPT_TABLESIZE    = "tableSize";
+    static const char* const OPT_MAXFILESIZE  = "maxFileSizeMB";
 
     // Table size ratio
     static const int tableRatio[]       = { 0, 2, 3, 4, 6, 8 };
@@ -114,6 +115,16 @@ static ServerConfig_t readConfigs(const char* filename) {
                 continue;
             }
         }
+        // Max file size MB
+        else if (strcmp(key, OPT_MAXFILESIZE) == 0) {
+            int num = parse_positive_integer(value);
+            if (num > 0) {
+                configs.maxFileSizeMB = num;
+            } else {
+                LOG_ERRO("Invalid value (%s) for option: %s. Must be an integer > 0", value, OPT_MAXFILESIZE);
+                continue;
+            }
+        }
         // Max size MB
         else if (strcmp(key, OPT_MAXSIZEMB) == 0) {
             int num = parse_positive_integer(value);
@@ -125,12 +136,12 @@ static ServerConfig_t readConfigs(const char* filename) {
             }
         }
         // Max size Slot
-        else if (strcmp(key, OPT_MAXSLOT) == 0) {
+        else if (strcmp(key, OPT_MAXSLOTCOUNT) == 0) {
             int num = parse_positive_integer(value);
             if (num > 0) {
                 configs.fsConfigs.maxFileCapacitySlot = num;
             } else {
-                LOG_ERRO("Invalid value (%s) for option: %s. Must be an integer > 0", value, OPT_MAXSLOT);
+                LOG_ERRO("Invalid value (%s) for option: %s. Must be an integer > 0", value, OPT_MAXSLOTCOUNT);
                 continue;
             }
         }
@@ -187,6 +198,12 @@ static ServerConfig_t readConfigs(const char* filename) {
         if (configs.numWorkers == 0) {
             LOG_WARN("Using default value (2) for thread workers count");
             configs.numWorkers = 2;
+        }
+
+        // Max file size (MB)
+        if (configs.maxFileSizeMB == 0) {
+            LOG_WARN("Using default value (8) for max file size");
+            configs.maxFileSizeMB = 8;
         }
 
         // Max capacity (MB)

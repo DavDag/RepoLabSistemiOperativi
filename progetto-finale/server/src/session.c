@@ -53,7 +53,6 @@ int getSession(ClientID client, SessionClientID* session) {
         return SESSION_NOT_EXIST;
 
     // Pass value
-    // TODO:
     *session = client;
     
     // Returns success
@@ -68,6 +67,9 @@ int destroySession(ClientID client) {
 
     // Update session
     _inn_session->isValid = 0;
+
+    // Clear data
+    // TODO
 
     // Returns success
     return __int_ret_updating_ses(_inn_session, 0);

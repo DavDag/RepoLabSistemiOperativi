@@ -3,9 +3,14 @@
 #ifndef FILE_SYSTEM_H
 #define FILE_SYSTEM_H
 
-#define FS_FILE_ALREADY_EXISTS 101
-#define FS_FILE_NOT_EXISTS     102
-#define FS_CLIENT_NOT_ALLOWED  103
+#define FS_FILE_ALREADY_EXISTS    101
+#define FS_FILE_NOT_EXISTS        102
+#define FS_CLIENT_NOT_ALLOWED     103
+#define FS_CLIENT_WAITING_ON_LOCK 104
+
+#include <pthread.h>
+
+#include "circ_queue.h"
 
 // Syntactic sugar
 typedef int ClientID;
@@ -25,15 +30,20 @@ typedef struct {
     int maxFileCapacityMB;   // 1MB ~> 512MB
 } FSConfig_t;
 
+typedef struct { int fd; int status; } FSLockNotification_t;
+
 /**
  * Initialize the "file_system".
  * MUST BE called ONCE before any other call.
  * 
- * \param configs: Configs parameters
+ * \param configs  : Configs parameters
+ * \param lockQueue: Queue where to insert successfully locked client (only as sideeffect from an unlock)
+ * \param lockCond : Where to signal for item inserted in the lock queue
+ * \param lockMutex: 
  * 
  * \retval 0: on success
  */
-int initializeFileSystem(FSConfig_t configs);
+int initializeFileSystem(FSConfig_t configs, CircQueue_t* lockQueue, pthread_cond_t* lockCond, pthread_mutex_t* lockMutex);
 
 /**
  * Terminate the "file_system".
@@ -126,7 +136,7 @@ int fs_exists(ClientID client, FSFile_t file);
  * \param file  : file to 'lock'
  * 
  * \retval  0: on success
- * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS, FS_CLIENT_WAITING_ON_LOCK ]
  */
 int fs_trylock(ClientID client, FSFile_t file);
 
