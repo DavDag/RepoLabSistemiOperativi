@@ -1,4 +1,4 @@
-# socketFile=
+socketFile=./cs_sock
 logFile=../log-test2.txt
 numWorkers=4
 maxFileSizeMB=1

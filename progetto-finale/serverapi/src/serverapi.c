@@ -8,7 +8,7 @@
 #include <string.h>
 #include <errno.h>
 
-#define MAX_BUFFER_SIZE 32 * 1024 * 1024 // ~> 1MB
+#define MAX_BUFFER_SIZE 64 * 1024 * 1024 // ~> 1MB
 
 static int gSocketFd   = -1;
 static char* gBuffer   = NULL;

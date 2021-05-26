@@ -26,21 +26,25 @@ $(SUBDIRS):
 
 CLIENT_EXE := ./client/$(BINARIES_DIR)/main
 SERVER_EXE := ./server/$(BINARIES_DIR)/main
-TEST1PID   := test1.pid
 
-test1:
+clean: resettest
+
+resettest:
+	@rm -rf ./out
+
+test1: resettest
 	@valgrind --leak-check=full $(SERVER_EXE) ./configs/test1.txt & \
 	./scripts/test1.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test2:
+test2: resettest
 	@$(SERVER_EXE) ./configs/test2.txt & \
 	./scripts/test2.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test3:
+test3: resettest
 	@$(SERVER_EXE) ./configs/test3.txt & \
 	timeout 30 ./scripts/test3.sh $(CLIENT_EXE); \
 	kill -2 $$!; \

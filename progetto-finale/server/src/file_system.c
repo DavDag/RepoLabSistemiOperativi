@@ -834,5 +834,5 @@ void summary() {
     } else {
         LOG_EMPTY("  %c              No file left in the server             %c\n", CV, CV);
     }
-    LOG_EMPTY("  %c", CC); TIMES(40, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n\n\n", CC);
+    LOG_EMPTY("  %c", CC); TIMES(40, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 }
