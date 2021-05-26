@@ -8,9 +8,9 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 
-#define LOG_TIMESTAMP
+// #define LOG_TIMESTAMP
 // #define LOG_WITHOUT_COLORS
-#define LOG_DEBUG
+// #define LOG_DEBUG
 #include <logger.h>
 #include <common.h>
 
@@ -57,6 +57,10 @@ FSFile_t deepCopyRequestIntoFile(SockMessage_t);
 volatile sig_atomic_t gSigIntReceived  = 0;
 volatile sig_atomic_t gSigQuitReceived = 0;
 volatile sig_atomic_t gSigHupReceived  = 0;
+static int gShouldStopWorking          = 0;
+
+static pthread_mutex_t gNumClientMutex = PTHREAD_MUTEX_INITIALIZER;
+static int gNumClientConnected         = 0;
 
 static WorkerThreadArgs_t* gWorkerArgs = NULL;
 static pthread_t* gWorkerThreads       = NULL;
@@ -146,6 +150,39 @@ int runServer() {
         }
     }
 
+    // Returns success
+    return RES_OK;
+}
+
+int terminateSever() {
+    LOG_VERB("[#MN] Terminating server ...");
+
+    // Broadcast signal
+    lock_mutex(&gWorkMutex);
+    notify_all(&gWorkCond);
+    unlock_mutex(&gWorkMutex);
+    
+    // Wait worker threads
+    LOG_VERB("[#MN] Waiting worker threads...");
+    for (int i = 0; i < gConfigs.numWorkers; ++i)
+        if (pthread_join(gWorkerThreads[i], NULL) < 0)
+        LOG_ERRNO("[#MN] Error joining worker thread #%d", i + 1);
+    free(gWorkerThreads);
+    free(gWorkerArgs);
+
+    // Now lock thread can stop
+    gShouldStopWorking = 1;
+    
+    // Signal lock thread
+    lock_mutex(&gLockMutex);
+    notify_one(&gLockCond);
+    unlock_mutex(&gLockMutex);
+    
+    // Wait lock thread
+    LOG_VERB("[#MN] Waiting lock thread...");
+    if (pthread_join(gLockThread, NULL) < 0)
+        LOG_ERRNO("[#MN] Error joining lock thread");
+    
     // Send request to exit from select thread
     int messageToSend = EXIT_REQUESTED;
     if (writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, sizeof(int)) < 0) {
@@ -161,41 +198,11 @@ int runServer() {
     } else {
         LOG_VERB("[#MN] Message 'EXIT_REQUESTED' sent to select thread");
     }
-
-    // Returns success
-    return RES_OK;
-}
-
-int terminateSever() {
-    LOG_INFO("[#MN] Terminating server ...");
     
     // Wait select thread
     LOG_VERB("[#MN] Waiting select thread...");
     if (pthread_join(gSelectThread, NULL) < 0)
         LOG_ERRNO("[#MN] Error joining select thread");
-
-    // Signal lock thread
-    lock_mutex(&gLockMutex);
-    notify_all(&gLockCond);
-    unlock_mutex(&gLockMutex);
-    
-    // Wait lock thread
-    LOG_VERB("[#MN] Waiting lock thread...");
-    if (pthread_join(gLockThread, NULL) < 0)
-        LOG_ERRNO("[#MN] Error joining lock thread");
-
-    // Broadcast signal
-    lock_mutex(&gWorkMutex);
-    notify_all(&gWorkCond);
-    unlock_mutex(&gWorkMutex);
-    
-    // Wait worker threads
-    LOG_VERB("[#MN] Waiting worker threads...");
-    for (int i = 0; i < gConfigs.numWorkers; ++i)
-        if (pthread_join(gWorkerThreads[i], NULL) < 0)
-        LOG_ERRNO("[#MN] Error joining worker thread #%d", i + 1);
-    free(gWorkerThreads);
-    free(gWorkerArgs);
 
     // Free work queue
     free(gWorkQueue->data);
@@ -300,15 +307,14 @@ void* workerThreadFun(void* args) {
     const int threadID  = ((WorkerThreadArgs_t*) args)->id;
     int res = 0;
 
-    // Stop working when SIGINT / SIGQUIT received and on SIGHUP when queue is empty
-    int hasFoundItem = 0;
-    while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && hasFoundItem)) {
+    // Stop working when SIGINT / SIGQUIT received and on SIGHUP when there're no more clients connected
+    while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || gNumClientConnected > 0)) {
         // Reset item
         CircQueueItemPtr_t item = NULL;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gWorkMutex);
-        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gWorkQueue, &item)) == 0) {
+        while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || gNumClientConnected > 0) && (tryPop(gWorkQueue, &item) == 0)) {
             LOG_VERB("[#%.2d] waiting for work...", threadID);
             // Wait for cond
             if ((res = pthread_cond_wait(&gWorkCond, &gWorkMutex)) != 0) {
@@ -345,6 +351,10 @@ void* workerThreadFun(void* args) {
                 destroySession(client);
             }
             LOG_VERB("[#SE] Client on FD#%02d disconnected !", client);
+            // Decrement counter
+            lock_mutex(&gNumClientMutex);
+            --gNumClientConnected;
+            unlock_mutex(&gNumClientMutex);
             continue;
         }
         // Message received !
@@ -377,7 +387,7 @@ void* selectThreadFun(void* args) {
     // Run until signal is received
     fd_set fds_cpy;
     int res = -1;
-    while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived) {
+    while (!gSigIntReceived && !gSigQuitReceived) {
         // Copy set of file descriptor
         fds_cpy = gFdSet;
 
@@ -416,6 +426,10 @@ void* selectThreadFun(void* args) {
                         FD_SET(value, &gFdSet);
                         gMaxFd = MAX(gMaxFd, value);
                         LOG_VERB("[#SE] Client connected on FD#%02d !", value);
+                        // Increment counter
+                        lock_mutex(&gNumClientMutex);
+                        ++gNumClientConnected;
+                        unlock_mutex(&gNumClientMutex);
                         break;
                     
                     case SET_CONNECTION:
@@ -467,15 +481,14 @@ void* lockThreadFun(void* args) {
     int res = 0;
     SockMessage_t msg;
 
-    // Stop working when SIGINT / SIGQUIT received and on SIGHUP when queue is empty
-    int hasFoundItem = 0;
-    while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && hasFoundItem)) {
+    // Stop working when SIGINT / SIGQUIT received
+    while (!gSigIntReceived && !gSigQuitReceived && !gShouldStopWorking) {
         // Reset item
         CircQueueItemPtr_t item = NULL;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gLockMutex);
-        while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived && (hasFoundItem = tryPop(gLockQueue, &item)) == 0) {
+        while (!gSigIntReceived && !gSigQuitReceived && !gShouldStopWorking && (tryPop(gLockQueue, &item) == 0)) {
             LOG_VERB("[#LK] waiting for work...");
             // Wait for cond
             if ((res = pthread_cond_wait(&gLockCond, &gLockMutex)) != 0) {
