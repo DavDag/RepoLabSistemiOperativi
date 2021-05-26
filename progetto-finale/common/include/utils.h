@@ -19,6 +19,18 @@
  */
 int parse_positive_integer(const char* str);
 
+/**
+ * Read entire file at once.
+ * 
+ * \param file  : file to read
+ * \param buffer: where to store allocated buffer containing the result
+ * \param len   : content len
+ * 
+ * \retval  0: on success
+ * \retval -1: on error. (errno set)
+ */
+int read_entire_file(const char* file, char** buffer, int* len);
+
 /*
  * Always returns a valid ptr or terminate the process
  */

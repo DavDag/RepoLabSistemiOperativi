@@ -16,6 +16,30 @@ int parse_positive_integer(const char* str) {
     return val;
 }
 
+int read_entire_file(const char* file, char** buffer, int* len) {
+    // vars
+    int res        = 0;
+    int contentLen = 0;
+    char* content  = NULL;
+
+    // Open file
+    FILE *f = fopen(file, "rb");
+    if (f == NULL) return -1;
+    if (fseek(f, 0, SEEK_END) != 0) return -1;
+    if ((contentLen = ftell(f)) < 0) return -1;
+    if ((res = fseek(f, 0, SEEK_SET)) != 0) return -1;
+    content = (char*) mem_malloc(contentLen);
+    fread(content, sizeof(char), contentLen, f);
+    fclose(f);
+
+    // Pass values
+    *buffer = content;
+    *len   = contentLen;
+
+    // Returns success
+    return 0;
+}
+
 void* mem_malloc(size_t size) {
     void* ptr = malloc(size);
 

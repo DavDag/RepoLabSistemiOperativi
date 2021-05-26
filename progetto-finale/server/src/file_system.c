@@ -376,6 +376,54 @@ int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
     return res;
 }
 
+int fs_append(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount) {
+    // vars
+    int res = 0;
+
+    // Get key
+    HashValue key = getKey(file);
+
+    // Acquire lock
+    lock_mutex(&gFSMutex);
+
+    // Check if file exist
+    FSCacheEntry_t* entry = getValueFromKey(key);
+    if (entry != NULL) {
+        // Check if file is owned by someone else
+        if (entry->owner != client && entry->owner != EMPTY_OWNER) {
+            res = FS_CLIENT_NOT_ALLOWED;
+        } else {
+            // Resize file content buffer to be large enough
+            int newContentLen      = file.contentLen + entry->file.contentLen;
+            entry->file.content    = mem_realloc((void*) entry->file.content, newContentLen * sizeof(char));
+
+            // Append content
+            memcpy((void*) &entry->file.content[entry->file.contentLen], file.content, file.contentLen);
+            entry->file.contentLen = newContentLen;
+
+            // Make dummy file to update size correctly
+            FSFile_t tmpFile = entry->file;
+            tmpFile.nameLen  = 0;
+
+            // Update cache
+            moveToTop(entry);
+            updateCacheSize(&file, &tmpFile, outFiles, outFilesCount);
+        }
+    } else {
+        res = FS_FILE_NOT_EXISTS;
+    }
+
+#ifdef DEBUG_LOG
+    log_cache_entirely("append");
+#endif
+
+    // Release lock
+    unlock_mutex(&gFSMutex);
+
+    // Returns the result
+    return res;
+}
+
 int fs_trylock(int client, FSFile_t file) {
     // vars
     int res = 0;

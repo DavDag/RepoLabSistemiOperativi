@@ -117,6 +117,19 @@ int fs_obtain_n(int client, int n, FSFile_t** outFiles, int* outFilesCount);
 int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
 /**
+ * Append data to a file in the filesystem.
+ * 
+ * \param client       : client requesting the action
+ * \param file         : file to update (with the content to add inside)
+ * \param outFiles     : ejected files to make room to the modified file
+ * \param outFilesCount: ejected files count
+ * 
+ * \retval  0: on success
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
+ */
+int fs_append(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
+
+/**
  * Check if file exist inside the filesystem.
  * 
  * \param client: client requesting the action

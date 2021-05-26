@@ -827,7 +827,13 @@ SockMessage_t handleWork(int workingThreadID, int client, SockMessage_t msg) {
 
                 case MSG_REQ_APPEND_TO_FILE:
                 {
-                    // TODO: 
+                    // Append data to file
+                    FSFile_t fs_file = copyRequestIntoFile(msg);
+                    if ((res = fs_append(client, fs_file, &outFiles, &outFilesCount)) != 0) {
+                        LOG_ERRO("[#%.2d] Error appending data to file '%s' for client #%.2d", workingThreadID, file.name, client);
+                        handleError(res, &response);
+                        break;
+                    }
                     break;
                 }
     

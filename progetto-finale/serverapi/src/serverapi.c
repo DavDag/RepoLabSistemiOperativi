@@ -158,7 +158,44 @@ int readFile(const char* pathname, void** buf, size_t* size) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse(NULL);
+
+    // 3. Wait message from server
+    bytes = 0;
+    if ((bytes = readMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        errno = ECANCELED;
+        return SERVER_API_FAILURE;
+    }
+    bytesRead += bytes;
+
+    // 4. Read content
+    int status = SERVER_API_SUCCESS;
+    if (msg.type == MSG_RESP_WITH_FILES) {
+        // Read file
+        if (msg.response.numFiles == 1) {
+            // Process data
+            int len = msg.response.files[0].contentLen;
+            char* buffer = (char*) mem_malloc(len * sizeof(char));
+            memcpy(buffer, msg.response.files[0].content.ptr, len * sizeof(char));
+            // Pass values
+            *buf  = buffer;
+            *size = len;
+        } else {
+            // Server-side error
+            handleServerStatus(msg.response.status);
+            status = SERVER_API_FAILURE;
+        }
+    } else if (msg.type == MSG_RESP_SIMPLE) {
+        // Server-side error
+        handleServerStatus(msg.response.status);
+        status = SERVER_API_FAILURE;
+    } else {
+        // Should never happend
+        LOG_WARN("Invalid message type from server.");
+        status = SERVER_API_FAILURE;
+    }
+
+    freeMessageContent(&msg, 0);
+    return status;
 }
 
 int readNFiles(int N, const char* dirname) {
@@ -188,28 +225,8 @@ int writeFile(const char* pathname, const char* dirname) {
     // 1. Read file content
     char* content  = NULL;
     int contentLen = 0;
-    {
-        // Read entire file
-        int res = 0;
-        FILE *f = fopen(pathname, "rb");                   // Open the file
-        if (f == NULL) return SERVER_API_FAILURE;          // Ensure correct opening
-        do {                                               // Simplify error managment
-            if ((res = fseek(f, 0, SEEK_END)) != 0) break; // Set 'cursor' to EOF
-            if ((contentLen = ftell(f)) < 0) {             // Retrieve 'cursor' position
-                res = contentLen;                          // 
-                contentLen = 0;                            // 
-                break;                                     // 
-            }                                              // 
-            if ((res = fseek(f, 0, SEEK_SET)) != 0) break; // Set 'cursor' to begin of file
-            content = (char*) mem_malloc(contentLen);      // Allocate memory to read entire file
-            fread(content, sizeof(char), contentLen, f);   // Read entire file
-        } while(0);                                        // 
-        fclose(f);                                         // Close file
-        if (res) {                                         // On error
-            if (content) free(content);                    //    release content (if allocated)
-            return SERVER_API_FAILURE;                     //    return error
-        }                                                  // 
-    }
+    if (read_entire_file(pathname, &content, &contentLen) < 0)
+        return SERVER_API_FAILURE;
     
     // 2. Send 'MSG_REQ_WRITE_FILE' message
     SockMessage_t msg = {
@@ -242,19 +259,34 @@ int writeFile(const char* pathname, const char* dirname) {
 }
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
-    // 1. Send '' message
+    int filenameLen = strlen(pathname) + 1;
+
+    // 1. Send 'MSG_REQ_WRITE_FILE' message
     SockMessage_t msg = {
         .uid = UUID_new(),
-        .type = MSG_NONE
+        .type = MSG_REQ_APPEND_TO_FILE,
+        .request = {
+            .flags = FLAG_EMPTY,
+            .file = {
+                .filename = {
+                    .len = filenameLen,
+                    .abs = { .ptr = pathname }
+                },
+                .contentLen = size,
+                .content = { .ptr = buf }
+            }
+        }
     };
     int bytes = 0;
     if ((bytes = writeMessage(gSocketFd, gBuffer, gBufferSize, &msg)) <= 0) {
+        free(buf);
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
     }
     bytesWritten += bytes;
     
     // 2. Wait for server response
+    free(buf);
     freeMessageContent(&msg, 0);
     return waitServerResponse(dirname);
 }

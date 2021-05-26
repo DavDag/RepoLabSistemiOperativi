@@ -17,28 +17,29 @@
 // ======================================== DECLARATIONS: Types =====================================================
 
 typedef enum {
-    OPT_NONE               =  0, // Default
+    OPT_NONE             =  0, // Default
     
     // Requested
-    OPT_HELP_ENABLED       =  1, // "-h" Print usage (help).
-    OPT_SOCKET_FILE        =  2, // "-f" Socket file path.
-    OPT_WRITE_DIR_REQ      =  3, // "-w" Send directory to server.
-    OPT_WRITE_FILE_REQ     =  4, // "-W" Send file/s to server.
-    OPT_WRITE_SAVE         =  5, // "-D" Where to save file/s received from server after write request.
-    OPT_READ_FILE_REQ      =  6, // "-r" Read file/s from server.
-    OPT_READ_RAND_REQ      =  7, // "-R" Read random file/s from server.
-    OPT_READ_SAVE          =  8, // "-d" Where to save file/s received from server after read request.
-    OPT_WAIT               =  9, // "-t" Time to wait between requests.
-    OPT_LOCK_FILE_REQ      = 10, // "-l" Send file/s lock request to server.
-    OPT_UNLOCK_FILE_REQ    = 11, // "-u" Send file/s unlock request to server.
-    OPT_REMOVE_FILE_REQ    = 12, // "-c" Remove file/s from server.
-    OPT_LOG_ENABLED        = 13, // "-p" Enable debug output.
+    OPT_HELP_ENABLED     =  1, // "-h" Print usage (help).
+    OPT_SOCKET_FILE      =  2, // "-f" Socket file path.
+    OPT_WRITE_DIR_REQ    =  3, // "-w" Send directory to server.
+    OPT_WRITE_FILE_REQ   =  4, // "-W" Send file/s to server.
+    OPT_WRITE_SAVE       =  5, // "-D" Where to save file/s received from server after write request.
+    OPT_READ_FILE_REQ    =  6, // "-r" Read file/s from server.
+    OPT_READ_RAND_REQ    =  7, // "-R" Read random file/s from server.
+    OPT_READ_SAVE        =  8, // "-d" Where to save file/s received from server after read request.
+    OPT_WAIT             =  9, // "-t" Time to wait between requests.
+    OPT_LOCK_FILE_REQ    = 10, // "-l" Send file/s lock request to server.
+    OPT_UNLOCK_FILE_REQ  = 11, // "-u" Send file/s unlock request to server.
+    OPT_REMOVE_FILE_REQ  = 12, // "-c" Remove file/s from server.
+    OPT_LOG_ENABLED      = 13, // "-p" Enable debug output.
 
     // GetOpt
-    OPT_OPTIONAL_ARG       = 15, // "\1" Sended by getopt when parsing optional parameter
+    OPT_OPTIONAL_ARG     = 15, // "\1" Sended by getopt when parsing optional parameter
 
     // Custom
-    OPT_CHANGE_LOG_LEVEL   = 20, // "-L" Change log level from here on
+    OPT_CHANGE_LOG_LEVEL = 20, // "-L" Change log level from here on
+    OPT_APPEND_DATA_REQ  = 21, // "-a" Append data to file.
 
 } CmdLineOptType_t;
 
@@ -100,6 +101,12 @@ static const char* const CLIENT_USAGE =
 "  -l file1[,file2]   lista di nomi di file su cui acquisire la mutua esclusione.\n"
 "  -u file1[,file2]   lista di nomi di file su cui rilasciare la mutua esclusione.\n"
 "  -c file1[,file2]   lista di file da rimuovere dal server se presenti.\n\n"
+"  -L [0|1|2|3|4|5]   permette di cambiare la politica di loggin da 0 (solamente errori\n"
+"                     critici) a 5 (verbose).\n"
+"  -a f1,f2[,dir]     permette di leggere il file 'f1' in locale ed appendere i bytes \n"
+"                     letti all'interno del file 'f2' sul server. L'operazione è garantita\n"
+"                     essere atomica (indivisibile). Il parametro opzional 'dir' specifica\n"
+"                     la directory dove salvare i dati che il server potrebbe ritornare.\n\n"
 ;
 
 static int gNftwExploredFileCount = 0;
@@ -120,7 +127,7 @@ int parseArguments(int argc, char** argv) {
     // Start parsing arguments
     LOG_VERB("Parsing arguments...");
     int opt = -1;
-    while((opt = getopt(argc, argv, "-hpf:w:W:D:r:R::d:t:l:u:c:" "L:")) != -1) {
+    while((opt = getopt(argc, argv, "-hpf:w:W:D:r:R::d:t:l:u:c:" "L:a:")) != -1) {
         // Check for max options count
         if (optionsSize == MAX_OPTIONS_COUNT) {
             // In case it reaches maximum options, it returns RES_OK to continue execution
@@ -248,12 +255,14 @@ int parseParam(int index, int opt, char* value) {
         case 'l':
         case 'u':
         case 'c':
+        case 'a':
         {
             option->type = (opt == 'W') ?  OPT_WRITE_FILE_REQ : option->type;
             option->type = (opt == 'r') ?   OPT_READ_FILE_REQ : option->type;
             option->type = (opt == 'l') ?   OPT_LOCK_FILE_REQ : option->type;
             option->type = (opt == 'u') ? OPT_UNLOCK_FILE_REQ : option->type;
             option->type = (opt == 'c') ? OPT_REMOVE_FILE_REQ : option->type;
+            option->type = (opt == 'a') ? OPT_APPEND_DATA_REQ : option->type;
 
             // Parse filenames file1[,file2,file3]
             int valueLen = strlen(value), numFiles = 1, lastFileIndex = 0;
@@ -444,7 +453,7 @@ int handleOption(int index) {
         }
 
         /**
-         * Explains code for:
+         * Explains general code flow for:
          *    OPT_WRITE_FILE_REQ
          *    OPT_READ_FILE_REQ
          *    OPT_LOCK_FILE_REQ
@@ -506,9 +515,54 @@ int handleOption(int index) {
                 // Log operation data
                 if (gIsExtendedLogEnabled) {
                     ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-W} file: %s, dirname: '%s', %s. Sent %dB, Received %dB",
+                    LOG_INFO("{-W} file: '%s', dirname: '%s', %s. Sent %dB, Received %dB",
                         pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
                 }
+            }
+            break;
+        }
+
+        case OPT_APPEND_DATA_REQ:
+        {
+            if (option.file_count != 2 && option.file_count != 3) {
+                LOG_ERRO("Error handling append request. Must be -a file1,file2[,dir]");
+                break;
+            }
+
+            int status = SERVER_API_SUCCESS;
+            char* fileToRead   = option.files[0];
+            char* fileToModify = option.files[1];
+            char* dirname      = (option.file_count == 3) ? option.files[2] : NULL;
+            
+            // Read file content
+            char* content  = NULL;
+            int contentLen = 0;
+            if (read_entire_file(fileToRead, &content, &contentLen) < 0) {
+                LOG_ERRNO("Error reading file '%s'", fileToRead);
+                break;
+            }
+
+            // [1]
+            if ((status = openFile(fileToModify, FLAG_EMPTY)) == SERVER_API_SUCCESS) {
+                // [2]
+                if ((status = appendToFile(fileToModify, content, contentLen, dirname)) == SERVER_API_FAILURE)
+                    LOG_ERRNO("Error appending to file '%s'", fileToModify);
+                // [3]
+                if (closeFile(fileToModify) == SERVER_API_FAILURE) {
+                    LOG_ERRNO("Error closing file '%s'", fileToModify);
+                    status = SERVER_API_FAILURE;
+                }
+            } else {
+                LOG_ERRNO("Error opening file '%s'", fileToModify);
+                free(content);
+            }
+
+            // [4]
+            // Log operation data
+            if (gIsExtendedLogEnabled) {
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("{-a} append file: '%s' to file '%s', dirname: '%s', %s. Sent %dB, Received %dB",
+                    fileToRead, fileToModify, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
             }
             break;
         }
@@ -546,9 +600,13 @@ int handleOption(int index) {
                 // Log operation data
                 if (gIsExtendedLogEnabled) {
                     ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-r} file: %s, dirname: '%s', %s. Sent %dB, Received %dB",
+                    LOG_INFO("{-r} file: '%s', dirname: '%s', %s. Sent %dB, Received %dB",
                         pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
                 }
+
+                LOG_VERB("size: %d", buffSize);
+                // LOG_VERB("buff content: %s", buff); buff is not a valid null-terminated string 
+                free(buff);
             }
             LOG_VERB("Files read from server");
             break;
@@ -576,7 +634,7 @@ int handleOption(int index) {
                 // Log operation data
                 if (gIsExtendedLogEnabled) {
                     ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-l} file: %s', %s. Sent %dB, Received %dB",
+                    LOG_INFO("{-l} file: '%s', %s. Sent %dB, Received %dB",
                         pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
                 }
             }
@@ -607,7 +665,7 @@ int handleOption(int index) {
                 // Log operation data
                 if (gIsExtendedLogEnabled) {
                     ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-u} file: %s, %s. Sent %dB, Received %dB",
+                    LOG_INFO("{-u} file: '%s', %s. Sent %dB, Received %dB",
                         pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
                 }
             }
@@ -637,7 +695,7 @@ int handleOption(int index) {
                 // Log operation data
                 if (gIsExtendedLogEnabled) {
                     ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-c} file: %s, %s. Sent %dB, Received %dB",
+                    LOG_INFO("{-c} file: '%s', %s. Sent %dB, Received %dB",
                         pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
                 }
             }
@@ -691,6 +749,7 @@ int freeOption(int index) {
         case OPT_LOCK_FILE_REQ:
         case OPT_UNLOCK_FILE_REQ:
         case OPT_REMOVE_FILE_REQ:
+        case OPT_APPEND_DATA_REQ:
             free(option.files);
             break;
         
