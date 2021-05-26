@@ -10,9 +10,12 @@
 
 // #define LOG_TIMESTAMP
 // #define LOG_WITHOUT_COLORS
-#define LOG_DEBUG
+// #define LOG_DEBUG
 #include <common.h>
 #include <serverapi.h>
+
+// Just for better logging
+#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":" B")
 
 // ======================================== DECLARATIONS: Types =====================================================
 
@@ -70,6 +73,8 @@ int handleOption(int);
 int freeOption(int);
 
 int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct FTW* ftwbuf);
+
+void log_operation_data(CmdLineOptType_t option, const char* filename, const char* dirname, int status);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -387,7 +392,7 @@ int handleOption(int index) {
         case OPT_SOCKET_FILE:
         {
             gSocketFilename = option.filename;
-            LOG_VERB("{-f} Socket file changed into '%s'", option.filename);
+            LOG_VERB("Socket file changed into '%s'", option.filename);
             break;
         }
 
@@ -407,7 +412,7 @@ int handleOption(int index) {
             
             // Log operation data
             if (gIsExtendedLogEnabled)
-                LOG_INFO("{-t} Waited for %ld s and %ld ms", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec) / 1000);
+                LOG_INFO("Waited for %ld s and %ld ms", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec) / 1000);
 
             LOG_VERB("Process resumed");
             break;
@@ -444,7 +449,7 @@ int handleOption(int index) {
             // Log operation data
             if (gIsExtendedLogEnabled) {
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("{-R} numFiles: %d, dirname: '%s', %s. Sent %dB, Received %dB",
+                LOG_INFO("REA-RNDM data: %d, dirname: '%s', %s. Sent %dB, Received %dB",
                     option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
             }
 
@@ -780,12 +785,28 @@ int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct F
 
     // [4]
     // Log operation data
-    if (gIsExtendedLogEnabled) {
-        ApiBytesInfo_t info = getBytesData();
-        LOG_INFO("{-w} file: '%s', %s. Sent %dB, Received %dB",
-            fpath, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-    }
     
     ++gNftwExploredFileCount;
     return (gNftwExploredFileLimit == 0) ? 0 : (gNftwExploredFileCount == gNftwExploredFileLimit);
+}
+
+void log_operation_data(CmdLineOptType_t option, const char* filename, const char* dirname, int status) {
+    // Log only if '-p' is enabled
+    if (!gIsExtendedLogEnabled) return;
+
+    // Operation table. Uninitialized values are set to NULL by default.
+    static const char* opTable[] = {
+        [OPT_WRITE_DIR_REQ  ] = "WRI-DIRE",
+        [OPT_WRITE_FILE_REQ ] = "WRI-FILE",
+        [OPT_READ_FILE_REQ  ] = "REA-FILE",
+        [OPT_LOCK_FILE_REQ  ] = "LOC-FILE",
+        [OPT_UNLOCK_FILE_REQ] = "UNL-FILE",
+        [OPT_REMOVE_FILE_REQ] = "REM-FILE",
+        [OPT_APPEND_DATA_REQ] = "APP-FILE",
+    };
+
+    // Retrieve last operation data
+    ApiBytesInfo_t info = getBytesData();
+    LOG_INFO("%7s data:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", opTable[option], filename, dirname,
+        (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
 }

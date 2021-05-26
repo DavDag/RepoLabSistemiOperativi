@@ -1,1 +1,7 @@
-echo "Test 3"
+#!/bin/sh
+
+while $true
+do
+    echo "test..."
+    sleep 2
+done

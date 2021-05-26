@@ -1,1 +1,4 @@
-echo "Test 1"
+#!/bin/sh
+
+client=$1
+

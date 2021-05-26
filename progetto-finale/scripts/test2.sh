@@ -1,1 +1,1 @@
-echo "Test 2"
+#!/bin/sh

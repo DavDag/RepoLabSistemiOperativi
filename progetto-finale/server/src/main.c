@@ -4,7 +4,7 @@
 
 int main(int argc, char** argv) {
     srand(time(NULL));
-    set_log_level(LOG_LEVEL_VERBOSE);
+    set_log_level(LOG_LEVEL_INFO);
     
     // Configs file must be the first parameter
     const char* configsFile = (argc > 1) ? argv[1] : DEFAULT_CONFIG_FILE;

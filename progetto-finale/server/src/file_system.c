@@ -19,6 +19,10 @@
 #define MAX_EJECTED_FILES_AT_SAME_TIME 1024
 #define MAX_CLIENT_WAITING_ON_LOCK 8
 
+// Just for summary uses
+#define TIMES(n, x) for (int i = 0; i < n; ++i) { x; }
+#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":" B")
+
 typedef struct FSCacheEntry_t {
     int owner;                   // owner of the lock (if locked, otherwise -1)
     FSFile_t file;                    // Data
@@ -47,6 +51,9 @@ static pthread_mutex_t* gLockMutex = NULL;
 static int gMaxSlotUsed  = 0;
 static int gMaxBytesUsed = 0;
 static int gCacheMisses  = 0;
+static int gQueryCount   = 0;
+
+#define INCREASE_QUERY_COUNT (++gQueryCount)
 
 // =============================================================================================
 
@@ -60,6 +67,7 @@ void updateCacheSize(FSFile_t*, FSFile_t*, FSFile_t**, int*);
 void deepCopyFile(FSFile_t, FSFile_t*);
 
 void log_cache_entirely();
+void summary();
 
 // =============================================================================================
 
@@ -89,31 +97,20 @@ int initializeFileSystem(FSConfig_t configs, CircQueue_t* lockQueue, pthread_con
 
 int terminateFileSystem() {
     LOG_VERB("[#FS] Terminating file system ...");
-    // SUMMARY
-    LOG_INFO("[#FS] =========== SUMMARY ============");
-    // SUMMARY: Max slot used
-    LOG_INFO("[#FS] Max slot used: %6d / %6d", gMaxSlotUsed, gConfigs.maxFileCapacitySlot);
-    // SUMMARY: Max MB used
-    LOG_INFO("[#FS] Max MB used  : %4.2fMB / %4.2fMB", (gMaxBytesUsed / 1024.0f / 1024.0f), ((float) gConfigs.maxFileCapacityMB));
-    // SUMMARY: Cache misses count
-    LOG_INFO("[#FS] Cache misses : %6d", gCacheMisses);
+
+    summary();
 
     // Cache
     lock_mutex(&gFSMutex);
     int depth = 0;
     FSCacheEntry_t* item = gCache.head;
-    LOG_INFO("[#FS] ============================= FILES ============================");
     while (item != NULL && depth < DEPTH_LIMIT) {
         FSCacheEntry_t* tmp = item->pre;
-        // SUMMARY: Files
-        LOG_INFO("[#FS] %-53s %8.2fKB", item->file.name, item->file.contentLen / 1024.0f);
         // Release memory
         freeCacheEntry(item);
         item = tmp;
         depth++;
     }
-    // SUMMARY
-    LOG_INFO("[#FS] ============================= FILES ============================");
     unlock_mutex(&gFSMutex);
 
     // Hashmap
@@ -152,6 +149,8 @@ int fs_insert(int client, FSFile_t file, int aquireLock, FSFile_t** outFiles, in
 #ifdef DEBUG_LOG
     log_cache_entirely("insert");
 #endif
+
+    INCREASE_QUERY_COUNT;
 
     // Release lock
     unlock_mutex(&gFSMutex);
@@ -225,6 +224,8 @@ int fs_remove(int client, FSFile_t file) {
     log_cache_entirely("remove");
 #endif
 
+    INCREASE_QUERY_COUNT;
+
     // Release lock
     unlock_mutex(&gFSMutex);
 
@@ -257,6 +258,8 @@ int fs_obtain(int client, FSFile_t file, FSFile_t* outFile) {
 #ifdef DEBUG_LOG
     log_cache_entirely("obtain");
 #endif
+
+    INCREASE_QUERY_COUNT;
 
     // Release lock
     unlock_mutex(&gFSMutex);
@@ -325,6 +328,8 @@ int fs_obtain_n(int client, int n, FSFile_t** outFiles, int* outFilesCount) {
     *outFiles      = files;
     *outFilesCount = filesIndex;
 
+    INCREASE_QUERY_COUNT;
+
     // Release lock
     unlock_mutex(&gFSMutex);
 
@@ -368,6 +373,8 @@ int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
 #ifdef DEBUG_LOG
     log_cache_entirely("modify");
 #endif
+
+    INCREASE_QUERY_COUNT;
 
     // Release lock
     unlock_mutex(&gFSMutex);
@@ -417,6 +424,8 @@ int fs_append(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
     log_cache_entirely("append");
 #endif
 
+    INCREASE_QUERY_COUNT;
+
     // Release lock
     unlock_mutex(&gFSMutex);
 
@@ -463,6 +472,8 @@ int fs_trylock(int client, FSFile_t file) {
     log_cache_entirely("lock");
 #endif
 
+    INCREASE_QUERY_COUNT;
+
     // Release lock
     unlock_mutex(&gFSMutex);
 
@@ -492,6 +503,8 @@ int fs_exists(int client, FSFile_t file) {
 #ifdef DEBUG_LOG
     log_cache_entirely("exists");
 #endif
+
+    INCREASE_QUERY_COUNT;
 
     // Release lock
     unlock_mutex(&gFSMutex);
@@ -555,6 +568,8 @@ int fs_unlock(int client, FSFile_t file) {
     log_cache_entirely("unlock");
 #endif
 
+    INCREASE_QUERY_COUNT;
+
     // Release lock
     unlock_mutex(&gFSMutex);
 
@@ -575,6 +590,8 @@ int fs_clean(int client, ClientSession_t* session) {
 #ifdef DEBUG_LOG
     log_cache_entirely("unlock");
 #endif
+
+    INCREASE_QUERY_COUNT;
 
     // Release lock
     unlock_mutex(&gFSMutex);
@@ -766,4 +783,56 @@ void deepCopyFile(FSFile_t file, FSFile_t* outFile) {
     }
     outFile->content    = content;
     outFile->contentLen = file.contentLen;
+}
+
+void summary() {
+    LOG_EMPTY("\n");
+
+    // Calc stats
+    int slotU  = gCache.slotUsed , slotM  = gCache.slotMax , slotP  = gMaxSlotUsed;
+    int bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
+
+    // To write more readable code
+    static char CC = '+';
+    static char CV = '|';
+    static char CH = '-';
+
+    // Header
+    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+
+    // Separator
+    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, 14, "", CV, 12, "    used    ", CV, 12, "    max    ", CV, 12, "    peak    ", CV);
+
+    // Separator
+    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+
+    // Cache size (Slot)
+    LOG_EMPTY("  %c%-*s%c %*d %c %*d %c %*d %c\n", CV, 14, "size (slot)", CV, 10, slotU, CV, 10, slotM, CV, 10, slotP, CV);
+
+    // Cache size (MB)
+    LOG_EMPTY("  %c%-*s%c %*.2f%s %c %*.2f%s %c %*.2f%s %c\n", CV, 14, "size (MB)", CV, 8, BYTES(bytesU), CV, 8, BYTES(bytesM), CV, 8, BYTES(bytesP), CV);
+
+    // Separator
+    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+
+    // Files left
+    if (gCache.slotUsed > 0) {
+        int depth = 0;
+        FSCacheEntry_t* item = gCache.head;
+        while (item != NULL && depth < DEPTH_LIMIT) {
+            // File data
+            int bytes = item->file.contentLen;
+            // Log
+            LOG_EMPTY("  %c%-*s%c %*.2f%s %c\n", CV, 40, item->file.name, CV, 8, BYTES(bytes), CV);
+            // Next
+            item = item->pre;
+            depth++;
+        }
+    } else {
+        LOG_EMPTY("  %c              No file left in the server             %c\n", CV, CV);
+    }
+    LOG_EMPTY("  %c", CC); TIMES(40, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n\n\n", CC);
 }
