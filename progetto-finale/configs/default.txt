@@ -22,12 +22,6 @@ numWorkers=4
 # 
 maxClients=32
 
-#
-# Max file size in megabytes
-# Must be a positive number
-#
-maxFileSizeMB=64
-
 # 
 # Max filesystem capacity in megabytes
 # Must be a positive number

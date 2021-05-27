@@ -22,11 +22,9 @@ void writeToBuffer(char** buf, const void* data, size_t size);
  */
 void readFromBuffer(char** buf, void* data, size_t size);
 
-// Converts content of 'data' from integer to char*
 void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull);
-
-// Converts content of 'data' from char* to integer
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
+int calcMsgSize(SockMessage_t* msg);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
@@ -34,7 +32,7 @@ void convertPtrToOffset(char* begin, MsgPtr_t* data);
 static thread_local int roff = 0;
 #endif
 
-int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* msg) {
+int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
 #ifdef DEBUG_MESSAGES
     roff = 0;
     lock_mutex(&gLogMutex);
@@ -44,16 +42,20 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
 
     errno = 0;
     int res = -1;
-    char* buffer = bbegin;
 
     // 1. Read size from socket
     int msgSize = 0;
     if ((res = readN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
-    if (msgSize > bufferSize) {
-        errno = ENOMEM;
-        return -1;
+
+    // Adjust buffer to fit message (if needed)
+    if (msgSize > *size || *buf == NULL) {
+        *buf  = (char*) mem_realloc(*buf, msgSize);
+        *size = msgSize;        
     }
+    // Save to copies
+    char* buffer = *buf;
+    char* bbegin = *buf;
 
     // 2. Read from socket (into temp buffer)
     memset(buffer, 0, msgSize * sizeof(char));
@@ -169,7 +171,6 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
         {
-            // TODO: Update rel
             convertOffsetToPtr(msg->raw_content, &msg->request.file.filename.abs, msg->request.file.filename.len);
             convertOffsetToPtr(msg->raw_content, &msg->request.file.content, msg->request.file.contentLen);
             break;
@@ -178,7 +179,6 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
         case MSG_RESP_WITH_FILES:
         {
             for (int i = 0; i < msg->response.numFiles; ++i) {
-                // TODO: Update rel
                 convertOffsetToPtr(msg->raw_content, &msg->response.files[i].filename.abs, msg->response.files[i].filename.len);
                 convertOffsetToPtr(msg->raw_content, &msg->response.files[i].content, msg->response.files[i].contentLen);
             }
@@ -207,7 +207,7 @@ int readMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* m
 static thread_local int woff = 0;
 #endif
 
-int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* msg) {
+int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
 #ifdef DEBUG_MESSAGES
     woff = 0;
     lock_mutex(&gLogMutex);
@@ -217,7 +217,16 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
 
     errno = 0;
     int res = -1;
-    char* buffer = bbegin;
+
+    // Adjust buffer to fit message (if needed)
+    int msgSize = calcMsgSize(msg);
+    if (msgSize > *size || *buf == NULL) {
+        *buf  = (char*) mem_realloc(*buf, msgSize);
+        *size = msgSize;        
+    }
+    // Save two copies
+    char* buffer = *buf;
+    char* bbegin = *buf;
     int rawBufferIndex = 0;
 
     // 1. Write message into buffer
@@ -346,7 +355,6 @@ int writeMessage(long socketfd, char* bbegin, size_t bufferSize, SockMessage_t* 
     }
 
     // 2. Write buffer (into socket)
-    int msgSize = rawbuffer - bbegin;
     if ((res = writeN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
         return res;
     if ((res = writeN(socketfd, bbegin, msgSize * sizeof(char))) != 1)
@@ -480,4 +488,50 @@ void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull) {
 
 void convertPtrToOffset(char* begin, MsgPtr_t* data) {
     data->i = data->ptr - begin; 
+}
+
+int calcMsgSize(SockMessage_t* msg) {
+    int totalSize = 0;
+    totalSize += sizeof(UUID_t);
+    totalSize += sizeof(SockMessageType_t);
+    switch (msg->type)
+    {
+        case MSG_REQ_READ_N_FILES:
+            totalSize += sizeof(int);
+            break;
+
+        case MSG_REQ_OPEN_FILE:
+        case MSG_REQ_CLOSE_FILE:
+        case MSG_REQ_READ_FILE:
+        case MSG_REQ_LOCK_FILE:
+        case MSG_REQ_UNLOCK_FILE:
+        case MSG_REQ_REMOVE_FILE:
+        case MSG_REQ_WRITE_FILE:
+        case MSG_REQ_APPEND_TO_FILE:
+            totalSize += sizeof(int);
+            totalSize += 4 * sizeof(int);
+            totalSize += msg->request.file.filename.len;
+            totalSize += msg->request.file.contentLen;
+            break;
+
+        case MSG_RESP_SIMPLE:
+            totalSize += sizeof(RespStatus_t);
+            break;
+
+        case MSG_RESP_WITH_FILES:
+            totalSize += sizeof(RespStatus_t);
+            totalSize += sizeof(int);
+            totalSize += msg->response.numFiles * 4 * sizeof(int);
+            for (int i = 0; i < msg->response.numFiles; ++i) {
+                totalSize += msg->response.files[i].filename.len;
+                totalSize += msg->response.files[i].contentLen;
+            }
+            break;
+
+        case MSG_REQ_OPEN_SESSION:
+        case MSG_REQ_CLOSE_SESSION:
+        default:
+            break;
+    }
+    return totalSize;
 }

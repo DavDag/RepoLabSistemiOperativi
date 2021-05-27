@@ -1,7 +1,8 @@
 #!/bin/sh
 
 prefix="-f ./cs_sock -p"
-# client="valgrind --leak-check=full $1 $prefix"
+#client="valgrind --leak-check=full --track-origins=yes $1 $prefix"
+#client="valgrind --leak-check=full --track-origins=yes --quiet $1 $prefix"
 client="$1 $prefix"
 
 # SEND DIRECTORY
@@ -14,11 +15,11 @@ $client -W ./tdir/file1.txt,./tdir/file2.txt -t 200 -W ./tdir/smallfile1.txt
 
 # READ RND FILES
 # $client -R -d ./out
-# $client -R n=5 -d ./out
-# $client -R n=5 -d ./out
+$client -R n=5 -d ./out
+$client -R n=5 -d ./out
 
 # READ FILES
-# $client -r ./tdir/file1.txt,./tdir/smallfile1.txt -t 200 -r ./tdir/file1.txt
+$client -r ./tdir/file1.txt,./tdir/smallfile1.txt -t 200 -r ./tdir/file1.txt
 
 # LOCK UNLOCk
 $client -l ./tdir/file1.txt -t 200 &

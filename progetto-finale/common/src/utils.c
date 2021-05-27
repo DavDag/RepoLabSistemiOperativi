@@ -115,8 +115,6 @@ void* mem_realloc(void* ptr, size_t size) {
     
     // Check for error
     if (newptr == NULL) {
-        free(ptr); // Original ptr still valid
-
         // On error, function fails (some bigger problem occurred)
         LOG_CRIT("Realloc failed trying to allocate %ul bytes", size);
         exit(EXIT_FAILURE);

@@ -13,12 +13,12 @@
 
 // To ensure the server break at certain point when using while
 #define DEPTH_LIMIT 1024*1024
-#define MAX_EJECTED_FILES_AT_SAME_TIME 1024
-#define MAX_CLIENT_WAITING_ON_LOCK 8
+#define MAX_EJECTED_FILES_AT_SAME_TIME 1024*1024
+#define MAX_CLIENT_WAITING_ON_LOCK 32
 
 // Just for summary uses
 #define TIMES(n, x) for (int i = 0; i < n; ++i) { x; }
-#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":" B")
+#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":"B ")
 
 typedef struct FSCacheEntry_t {
     int owner;                   // owner of the lock (if locked, otherwise -1)

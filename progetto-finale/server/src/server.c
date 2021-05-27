@@ -24,6 +24,8 @@
 #define NEW_CONNECTION 1001 // Main => Select   : client connected
 #define SET_CONNECTION 1002 // Worker => Select : readd client
 
+#define MAX_FILE_SIZE 32
+
 // ======================================== DECLARATIONS: Types =====================================================
 
 // Syntactic sugar
@@ -298,8 +300,8 @@ void cleanup() {
 
 void* workerThreadFun(void* args) {
     // vars
-    char* _inn_buffer   = (char*) mem_malloc(gConfigs.maxFileSizeMB * 1024 * 1024 * sizeof(char));
-    int innerBufferSize = gConfigs.maxFileSizeMB * 1024 * 1024;
+    char* _inn_buffer   = NULL;
+    int innerBufferSize = 0;
     const int threadID  = ((WorkerThreadArgs_t*) args)->id;
     int res = 0;
 
@@ -331,7 +333,7 @@ void* workerThreadFun(void* args) {
 
         // Read message from client
         SockMessage_t requestMsg;
-        if ((res = readMessage(client, _inn_buffer, innerBufferSize, &requestMsg)) < 0) {
+        if ((res = readMessage(client, &_inn_buffer, &innerBufferSize, &requestMsg)) < 0) {
             LOG_ERRNO("[#SE] Error reading message");
             // Close socket
             if (close(client) < 0)
@@ -367,7 +369,7 @@ void* workerThreadFun(void* args) {
         } else {
             LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
             // Write response to client
-            if (writeMessage(client, _inn_buffer, innerBufferSize, &responseMsg) == -1)
+            if (writeMessage(client, &_inn_buffer, &innerBufferSize, &responseMsg) == -1)
                 LOG_ERRNO("Error sending response");
             // Readd descriptor to set
             int messageToSend[2] = { SET_CONNECTION, client };
@@ -477,7 +479,8 @@ void* selectThreadFun(void* args) {
 
 void* lockThreadFun(void* args) {
     // vars
-    char _inn_buff[1024]; // Can be fixed because responses are always the same
+    int innerBufferSize = 1024;
+    char* _inn_buff = (char*) mem_malloc(innerBufferSize * sizeof(char)); // Can be fixed because responses are always the same
     int res = 0;
     SockMessage_t msg;
 
@@ -523,7 +526,7 @@ void* lockThreadFun(void* args) {
 
         // Write response to client
         LOG_VERB("[#LK] Notification arrived. Sending %d to %d...", msg.response.status, notification.fd);
-        if (writeMessage(notification.fd, _inn_buff, 1024, &msg) == -1)
+        if (writeMessage(notification.fd, &_inn_buff, &innerBufferSize, &msg) == -1)
             LOG_ERRNO("Error sending response");
 
         // Readd descriptor to set
@@ -533,6 +536,7 @@ void* lockThreadFun(void* args) {
         // Release memory
         free(item);
     }
+    free(_inn_buff);
     return NULL;
 }
 

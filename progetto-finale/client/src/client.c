@@ -443,7 +443,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("[REA-RNDM] count:'%16s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.val, dirname,
+            LOG_INFO("[REA-RNDM] count:'%16d' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.val, dirname,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -599,6 +599,7 @@ int handleOption(int index) {
                     if (save_as_file(dirname, pathname, buff, buffSize) == -1)
                         status = SERVER_API_FAILURE;
                 }
+                if (buff) free(buff);
 
                 // [4]
                 // Log operation
@@ -606,9 +607,8 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[REA-FILE] file:'%-32s' size: %8.2d%s. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, BYTES(buffSize),
+                LOG_INFO("[REA-FILE] file:'%-32s' size: %8.2f%s. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, BYTES(buffSize),
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
-                free(buff);
             }
             break;
         }

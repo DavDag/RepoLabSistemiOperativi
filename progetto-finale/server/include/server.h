@@ -13,7 +13,6 @@ typedef struct {
     const char* logFilename;
     int numWorkers;
     int maxClients;
-    int maxFileSizeMB;
     FSConfig_t fsConfigs;
 } ServerConfig_t;
 

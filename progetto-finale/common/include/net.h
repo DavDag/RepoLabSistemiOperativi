@@ -109,8 +109,7 @@ typedef struct {
 } SockMessage_t;
 
 /**
- * Read message from socket. No memory allocation done, message struct contains 
- * pointers to buffer data. Do not free buffer without freeing message.
+ * TODO
  * 
  * \param socketfd  : file descriptor of the socket
  * \param buffer    : buffer for storing data
@@ -121,11 +120,10 @@ typedef struct {
  * \retval  0: on EOF (connection closed)
  * \retval >0: on success
  */
-int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
+int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg);
 
 /**
- * Write message into socket. No memory allocation done, message struct contains 
- * pointers to buffer data. Do not free buffer without freeing message.
+ * TODO
  * 
  * \param socketfd  : file descriptor of the socket
  * \param buffer    : buffer for storing data
@@ -135,7 +133,7 @@ int readMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* m
  * \retval  -1: on error (errno set)
  * \retval >=0: on success
  */
-int writeMessage(long socketfd, char* buffer, size_t bufferSize, SockMessage_t* msg);
+int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg);
 
 /*
  * Correctly handle messages content deallocation.

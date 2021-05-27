@@ -1,7 +1,6 @@
 socketFile=./cs_sock
 logFile=../log-test2.txt
 numWorkers=4
-maxFileSizeMB=1
 maxClients=32
 maxSizeMB=1
 maxSizeSlot=10
