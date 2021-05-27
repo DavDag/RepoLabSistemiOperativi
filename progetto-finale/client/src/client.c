@@ -8,14 +8,11 @@
 #include <limits.h>
 #include <string.h>
 
-// #define LOG_TIMESTAMP
-// #define LOG_WITHOUT_COLORS
-// #define LOG_DEBUG
 #include <common.h>
 #include <serverapi.h>
 
 // Just for better logging
-#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":" B")
+#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":"B ")
 
 // ======================================== DECLARATIONS: Types =====================================================
 
@@ -411,7 +408,6 @@ int handleOption(int index) {
                 LOG_ERRNO("Error sleeping");
             
             LOG_VERB("Waited for %ld s and %ld ms", (timeToWait.tv_sec - timeRemaining.tv_sec), (timeToWait.tv_nsec - timeRemaining.tv_nsec) / 1000000);
-            LOG_VERB("Process resumed");
             break;
         }
             
@@ -439,18 +435,16 @@ int handleOption(int index) {
                 dirname = options[index + 1].save_dirname;
             
             // Try read N files from server
-            if ((status = readNFiles(option.val, dirname)) == SERVER_API_FAILURE) {
+            if ((status = readNFiles(option.val, dirname)) == SERVER_API_FAILURE)
                 LOG_ERRNO("Error reading files from server");
-            }
 
-            // Log operation data
-            if (gIsExtendedLogEnabled) {
-                ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("REA-RNDM data: %d, dirname: '%s', %s. Sent %dB, Received %dB",
-                    option.val, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-            }
+            // Log operation
+            if (!gIsExtendedLogEnabled) break;
 
-            LOG_VERB("Files read from server");
+            // Retrieve last operation data
+            ApiBytesInfo_t info = getBytesData();
+            LOG_INFO("[REA-RNDM] count:'%16s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.val, dirname,
+                (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
 
@@ -514,12 +508,13 @@ int handleOption(int index) {
                 }
 
                 // [4]
-                // Log operation data
-                if (gIsExtendedLogEnabled) {
-                    ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-W} file: '%s', dirname: '%s', %s. Sent %dB, Received %dB",
-                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-                }
+                // Log operation
+                if (!gIsExtendedLogEnabled) continue;
+
+                // Retrieve last operation data
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("[WRI-FILE] file:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, dirname,
+                    (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
         }
@@ -560,12 +555,13 @@ int handleOption(int index) {
             }
 
             // [4]
-            // Log operation data
-            if (gIsExtendedLogEnabled) {
-                ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("{-a} append file: '%s' to file '%s', dirname: '%s', %s. Sent %dB, Received %dB",
-                    fileToRead, fileToModify, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-            }
+            // Log operation
+            if (!gIsExtendedLogEnabled) break;
+
+            // Retrieve last operation data
+            ApiBytesInfo_t info = getBytesData();
+            LOG_INFO("[APP-FILE] file:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", fileToModify, dirname,
+                (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
 
@@ -598,19 +594,22 @@ int handleOption(int index) {
                     LOG_ERRNO("Error opening file '%s'", pathname);
                 }
 
-                // [4]
-                // Log operation data
-                if (gIsExtendedLogEnabled) {
-                    ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-r} file: '%s', dirname: '%s', %s. Sent %dB, Received %dB",
-                        pathname, dirname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
+                // Save file if dirname
+                if (dirname && status == SERVER_API_SUCCESS) {
+                    if (save_as_file(dirname, pathname, buff, buffSize) == -1)
+                        status = SERVER_API_FAILURE;
                 }
 
-                LOG_VERB("size: %d", buffSize);
-                // LOG_VERB("buff content: %s", buff); buff is not a valid null-terminated string 
+                // [4]
+                // Log operation
+                if (!gIsExtendedLogEnabled) break;
+
+                // Retrieve last operation data
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("[REA-FILE] file:'%-32s' size: %8.2d%s. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, BYTES(buffSize),
+                    (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
                 free(buff);
             }
-            LOG_VERB("Files read from server");
             break;
         }
 
@@ -633,14 +632,14 @@ int handleOption(int index) {
                 }
 
                 // [4]
-                // Log operation data
-                if (gIsExtendedLogEnabled) {
-                    ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-l} file: '%s', %s. Sent %dB, Received %dB",
-                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-                }
+                // Log operation
+                if (!gIsExtendedLogEnabled) break;
+
+                // Retrieve last operation data
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("[LOC-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                    (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
-            LOG_VERB("Files locked");
             break;
         }
 
@@ -664,14 +663,14 @@ int handleOption(int index) {
                 }
 
                 // [4]
-                // Log operation data
-                if (gIsExtendedLogEnabled) {
-                    ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-u} file: '%s', %s. Sent %dB, Received %dB",
-                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-                }
+                // Log operation
+                if (!gIsExtendedLogEnabled) break;
+
+                // Retrieve last operation data
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("[UNL-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                    (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
-            LOG_VERB("Files unlocked");
             break;
         }
 
@@ -694,14 +693,14 @@ int handleOption(int index) {
                 }
 
                 // [4]
-                // Log operation data
-                if (gIsExtendedLogEnabled) {
-                    ApiBytesInfo_t info = getBytesData();
-                    LOG_INFO("{-c} file: '%s', %s. Sent %dB, Received %dB",
-                        pathname, (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", info.bytesW, info.bytesR);
-                }
+                // Log operation
+                if (!gIsExtendedLogEnabled) break;
+
+                // Retrieve last operation data
+                ApiBytesInfo_t info = getBytesData();
+                LOG_INFO("[REM-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                    (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
-            LOG_VERB("Files removed from server");
             break;
         }
 
@@ -710,11 +709,18 @@ int handleOption(int index) {
             // Explore directory using ntfw
             gNftwExploredFileCount = 0;
             gNftwExploredFileLimit = option.val;
+            int status = SERVER_API_SUCCESS;
             if (nftw(option.dirname, nftwExplorFunc, 16, FTW_PHYS) == -1) {
                 LOG_ERRNO("Error exploring directory '%s'", option.dirname);
-                break;
+                status = SERVER_API_FAILURE;
             }
-            LOG_VERB("Directory sent to server", option.dirname);
+            // Log operation
+            if (!gIsExtendedLogEnabled) break;
+
+            // Retrieve last operation data
+            ApiBytesInfo_t info = getBytesData();
+            LOG_INFO("[WRI-DIRE] dir:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.dirname,
+                (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
 
@@ -787,23 +793,3 @@ int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct F
     return (gNftwExploredFileLimit == 0) ? 0 : (gNftwExploredFileCount == gNftwExploredFileLimit);
 }
 
-void log_operation_data(CmdLineOptType_t option, const char* filename, const char* dirname, int status) {
-    // Log only if '-p' is enabled
-    if (!gIsExtendedLogEnabled) return;
-
-    // Operation table. Uninitialized values are set to NULL by default.
-    static const char* opTable[] = {
-        [OPT_WRITE_DIR_REQ  ] = "WRI-DIRE",
-        [OPT_WRITE_FILE_REQ ] = "WRI-FILE",
-        [OPT_READ_FILE_REQ  ] = "REA-FILE",
-        [OPT_LOCK_FILE_REQ  ] = "LOC-FILE",
-        [OPT_UNLOCK_FILE_REQ] = "UNL-FILE",
-        [OPT_REMOVE_FILE_REQ] = "REM-FILE",
-        [OPT_APPEND_DATA_REQ] = "APP-FILE",
-    };
-
-    // Retrieve last operation data
-    ApiBytesInfo_t info = getBytesData();
-    LOG_INFO("%7s data:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", opTable[option], filename, dirname,
-        (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
-}

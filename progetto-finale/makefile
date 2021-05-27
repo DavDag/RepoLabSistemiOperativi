@@ -1,5 +1,5 @@
 CC       =  gcc
-CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors -fPIC -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
+CFLAGS  += -std=c11 -Wall -Werror -pedantic-errors -fPIC -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DLOG_DEBUG
 INCLUDES = -I $(PWD)/common/include -I ./include
 LDFLAGS  = 
 LIBS     = -L$(PWD)/common/$(BINARIES_DIR) -lcommon -pthread
@@ -29,22 +29,26 @@ SERVER_EXE := ./server/$(BINARIES_DIR)/main
 
 clean: resettest
 
+addperm:
+	@chmod +rx $(CLIENT_EXE)
+	@chmod +rx $(SERVER_EXE)
+
 resettest:
 	@rm -rf ./out
 
-test1: resettest
+test1: addperm | resettest
 	@valgrind --leak-check=full $(SERVER_EXE) ./configs/test1.txt & \
 	./scripts/test1.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test2: resettest
+test2: addperm | resettest
 	@$(SERVER_EXE) ./configs/test2.txt & \
 	./scripts/test2.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test3: resettest
+test3: addperm | resettest
 	@$(SERVER_EXE) ./configs/test3.txt & \
 	timeout 30 ./scripts/test3.sh $(CLIENT_EXE); \
 	kill -2 $$!; \

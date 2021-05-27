@@ -40,6 +40,48 @@ int read_entire_file(const char* file, char** buffer, int* len) {
     return 0;
 }
 
+int save_as_file(const char* dirname, const char* filename, const char* content, int contentSize) {
+    // Calc path
+    static char mkdirCmdPrefix[] = "mkdir -p ";
+    static char mkdirCmd[4096];
+    memset(mkdirCmd, 0, 4096 * sizeof(char));
+    strcpy(mkdirCmd, mkdirCmdPrefix);
+    strcat(mkdirCmd, dirname);
+    strcat(mkdirCmd, "/");
+    strcat(mkdirCmd, filename);
+    char* path = &mkdirCmd[9];
+    int pathLen = strlen(path);
+
+    // Temporary shrink string
+    int slashIndex = 0;
+    for (int c = pathLen - 1; c > 0; --c) {
+        if (path[c] == '/') {
+            path[c] = '\0';
+            slashIndex = c;
+            break;
+        }
+    }
+
+    // Create directory
+    system(mkdirCmd);
+    path[slashIndex] = '/';
+
+    // Open file
+    FILE* file = NULL;
+    if ((file = fopen(path, "wb")) == NULL)
+        return -1;
+    
+    // Write file
+    if (fwrite(content, sizeof(char), contentSize, file) != contentSize)
+        return -1;
+
+    // Close file
+    fclose(file);
+
+    // Returns success
+    return 0;
+}
+
 void* mem_malloc(size_t size) {
     void* ptr = malloc(size);
 

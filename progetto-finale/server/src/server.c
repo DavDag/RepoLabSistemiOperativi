@@ -8,10 +8,6 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 
-// #define LOG_TIMESTAMP
-// #define LOG_WITHOUT_COLORS
-// #define LOG_DEBUG
-#include <logger.h>
 #include <common.h>
 
 #include "circ_queue.h"

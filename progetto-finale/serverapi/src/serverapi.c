@@ -464,47 +464,9 @@ int waitServerResponse(const char* dirname) {
                     int contentLen        = msg.response.files[i].contentLen;
                     const char* content   = msg.response.files[i].content.ptr;
                     const char* pathname  = msg.response.files[i].filename.abs.ptr;
-
                     LOG_VERB("Saving file %s into directory %s ...", pathname, dirname);
-
-                    // Calc path
-                    static char mkdirCmdPrefix[] = "mkdir -p ";
-                    static char mkdirCmd[4096];
-                    memset(mkdirCmd, 0, 4096 * sizeof(char));
-                    strcpy(mkdirCmd, mkdirCmdPrefix);
-                    strcat(mkdirCmd, dirname);
-                    strcat(mkdirCmd, "/");
-                    strcat(mkdirCmd, pathname);
-                    char* path = &mkdirCmd[9];
-                    int pathLen = strlen(path);
-
-                    // Temporary shrink string
-                    int slashIndex = 0;
-                    for (int c = pathLen - 1; c > 0; --c) {
-                        if (path[c] == '/') {
-                            path[c] = '\0';
-                            slashIndex = c;
-                            break;
-                        }
-                    }
-
-                    // Create directory
-                    system(mkdirCmd);
-                    path[slashIndex] = '/';
-
-                    // Open file
-                    FILE* file = NULL;
-                    if ((file = fopen(path, "wb")) == NULL) {
-                        LOG_ERRNO("Error opening file %s", path);
-                        continue;
-                    }
-                    
-                    // Write file
-                    if (fwrite(content, sizeof(char), contentLen, file) != contentLen)
-                        LOG_ERRNO("Error writing file %s", path);
-
-                    // Close file
-                    fclose(file);
+                    if (save_as_file(dirname, pathname, content, contentLen) == -1)
+                        return SERVER_API_FAILURE;
                 }
             }
             break;

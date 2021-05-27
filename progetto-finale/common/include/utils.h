@@ -31,6 +31,19 @@ int parse_positive_integer(const char* str);
  */
 int read_entire_file(const char* file, char** buffer, int* len);
 
+/**
+ * Save buffer as file inside directory dir (creating it recursively).
+ * 
+ * \param dirname    : where to save the file
+ * \param filename   : final name of the file
+ * \param content    : buffer
+ * \param contentSize: size of the buffer
+ * 
+ * \retval  0: on success
+ * \retval -1: on error. (errno set)
+ */
+int save_as_file(const char* dirname, const char* filename, const char* content, int contentSize);
+
 /*
  * Always returns a valid ptr or terminate the process
  */

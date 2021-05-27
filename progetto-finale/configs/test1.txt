@@ -5,4 +5,4 @@ maxFileSizeMB=32
 maxClients=64
 maxSizeMB=128
 maxSizeSlot=10000
-tableSize=SMALL
+tableSize=BIG

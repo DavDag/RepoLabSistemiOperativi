@@ -5,9 +5,6 @@
 #include <threads.h>
 #include <pthread.h>
 
-// #define LOG_TIMESTAMP
-// #define LOG_DEBUG
-#include <logger.h>
 #include <common.h>
 
 #define EMPTY_OWNER -1

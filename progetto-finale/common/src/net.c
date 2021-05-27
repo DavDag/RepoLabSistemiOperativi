@@ -1,6 +1,5 @@
 #include "net.h"
 
-#define LOG_DEBUG
 #include "logger.h"
 #include "utils.h"
 #include <string.h>
