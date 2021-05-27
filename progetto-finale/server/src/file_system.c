@@ -204,11 +204,12 @@ int fs_remove(int client, FSFile_t file) {
                     // Try again fastest possible.
                     // It blocks the entire server and needs to be done fast
                 }
+                LOG_VERB("[#FS] Removed %d from lock req queue", notification->fd);
+                // Signal queue
+                lock_mutex(gLockMutex);
+                notify_one(gLockCond);
+                unlock_mutex(gLockMutex);
             }
-            // Signal queue
-            lock_mutex(gLockMutex);
-            notify_one(gLockCond);
-            unlock_mutex(gLockMutex);
 
             // Update cache
             updateCacheSize(NULL, &file, NULL, NULL);
@@ -452,6 +453,7 @@ int fs_trylock(int client, FSFile_t file) {
             if (tryPush(entry->waitingLockQueue, (void*) (intptr_t) client) == 1) {
                 // Successfully pushed into queue
                 res = FS_CLIENT_WAITING_ON_LOCK;
+                LOG_VERB("[#FS] Added %d to lock req queue", client);
             }
             else {
                 // Queue may be full
@@ -522,7 +524,7 @@ int _inner_unlock(int client, HashValue key) {
         if (entry->owner != client) {
             return FS_CLIENT_NOT_ALLOWED;
         } else {
-            // 'Lock' file
+            // 'Unlock' file
             entry->owner = EMPTY_OWNER;
 
             // Get first client waiting on lock (if any)
@@ -532,15 +534,20 @@ int _inner_unlock(int client, HashValue key) {
                 FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
                 notification->fd     = (intptr_t) item;
                 notification->status = 0; // OK
+                // 'lock' file
+                entry->owner = notification->fd;
                 // Push into lock queue
                 while (tryPush(gLockQueue, notification) != 1) {
                     // Try again fastest possible.
                     // It blocks the entire server and needs to be done fast
                 }
+                LOG_VERB("[#FS] Removed %d from lock req queue", notification->fd);
                 // Signal queue
                 lock_mutex(gLockMutex);
                 notify_one(gLockCond);
                 unlock_mutex(gLockMutex);
+            } else {
+                LOG_VERB("[#FS] No client found in lock req queue");
             }
 
             // Update cache
@@ -588,7 +595,7 @@ int fs_clean(int client, ClientSession_t* session) {
     }
 
 #ifdef DEBUG_LOG
-    log_cache_entirely("unlock");
+    log_cache_entirely("clean");
 #endif
 
     INCREASE_QUERY_COUNT;
@@ -786,8 +793,6 @@ void deepCopyFile(FSFile_t file, FSFile_t* outFile) {
 }
 
 void summary() {
-    LOG_EMPTY("\n");
-
     // Calc stats
     int slotU  = gCache.slotUsed , slotM  = gCache.slotMax , slotP  = gMaxSlotUsed;
     int bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;

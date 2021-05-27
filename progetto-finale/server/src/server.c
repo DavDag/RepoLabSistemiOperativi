@@ -337,6 +337,9 @@ void* workerThreadFun(void* args) {
         SockMessage_t requestMsg;
         if ((res = readMessage(client, _inn_buffer, innerBufferSize, &requestMsg)) < 0) {
             LOG_ERRNO("[#SE] Error reading message");
+            // Close socket
+            if (close(client) < 0)
+                LOG_ERRNO("[#SE] Error closing socket #%02d", client);
             continue;
         }
         if (res == 0) {
@@ -451,14 +454,15 @@ void* selectThreadFun(void* args) {
             if (FD_ISSET(fd, &fds_cpy)) {
                 // Already checked
                 if (fd == mainToSelectPipe[PIPE_READ_END]) continue;
+
+                // Remove fd from set
+                FD_CLR(fd, &gFdSet);
                 
                 // Try push message into queue
                 if (tryPush(gWorkQueue, (void*) (intptr_t) fd) == 0) {
                     LOG_WARN("[#SE] Msg queue is full. Consider upgrading its capacity. (curr = %d)", gWorkQueue->capacity);
                     // TODO: Il client ?
                 }
-                // Remove fd from set
-                FD_CLR(fd, &gFdSet);
 
                 // Signal item added to queue
                 lock_mutex(&gWorkMutex);
@@ -489,7 +493,7 @@ void* lockThreadFun(void* args) {
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gLockMutex);
         while (!gSigIntReceived && !gSigQuitReceived && !gShouldStopWorking && (tryPop(gLockQueue, &item) == 0)) {
-            LOG_VERB("[#LK] waiting for work...");
+            LOG_VERB("[#LK] waiting for notifications...");
             // Wait for cond
             if ((res = pthread_cond_wait(&gLockCond, &gLockMutex)) != 0) {
                 errno = res;
@@ -522,9 +526,13 @@ void* lockThreadFun(void* args) {
         handleError(notification.status, &msg);
 
         // Write response to client
-        LOG_VERB("[#LK] work completed. Sending response...");
+        LOG_VERB("[#LK] Notification arrived. Sending %d to %d...", msg.response.status, notification.fd);
         if (writeMessage(notification.fd, _inn_buff, 1024, &msg) == -1)
             LOG_ERRNO("Error sending response");
+
+        // Readd descriptor to set
+        int messageToSend[2] = { SET_CONNECTION, notification.fd };
+        writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int));
 
         // Release memory
         free(item);
