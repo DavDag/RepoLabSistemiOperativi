@@ -1,40 +1,48 @@
 #!/bin/sh
 
 prefix="-f ./cs_sock -p"
-#client="valgrind --leak-check=full --track-origins=yes $1 $prefix"
-#client="valgrind --leak-check=full --track-origins=yes --quiet $1 $prefix"
 client="$1 $prefix"
+idir="$(pwd)/tdir"
+
+sleep 1
+echo "   ----------+----------------------------------------------------------------------+----------------------------------+----------+-----------------+-----------------+"
 
 # SEND DIRECTORY
-$client -w ./tdir/bigdir
-$client -w ./tdir/simpledir -t 200 -w ./tdir/genericdir
-$client -w ./tdir/recursivedir -t 200 -w ./tdir/longdir,n=5
+$client -w $idir/simpledir -t 200 -w $idir/genericdir
+$client -w $idir/recursivedir -t 200 -w $idir/longdir
+$client -w $idir/bigdir,n=10 -D ./out/cachemisses
 
 # SEND FILE / FILES
-$client -W ./tdir/file1.txt,./tdir/file2.txt -t 200 -W ./tdir/smallfile1.txt
+$client -W $idir/file1.txt,$idir/file2.txt -t 200 -W $idir/smallfile1.txt,$idir/smallfile2.txt
 
 # READ RND FILES
-# $client -R -d ./out
-$client -R n=5 -d ./out
-$client -R n=5 -d ./out
+$client -R -d ./out/rn0
+$client -R n=5 -d ./out/rn5
+$client -R n=7 -d ./out/rn7
+$client -R n=2 -d ./out/rn2
+$client -R n=3 -d ./out/rn3
 
 # READ FILES
-$client -r ./tdir/file1.txt,./tdir/smallfile1.txt -t 200 -r ./tdir/file1.txt
+$client -r $idir/file1.txt,$idir/smallfile1.txt -t 200 -r $idir/file1.txt
 
-# LOCK UNLOCk
-$client -l ./tdir/file1.txt -t 200 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 100 &
-$client -l ./tdir/file1.txt -t 200 -u ./tdir/file1.txt &
-$client -l ./tdir/file1.txt,./tdir/smallfile1.txt
+# LOCK / UNLOCK
+$client -l $idir/file1.txt -t 200 &
+$client -l $idir/file1.txt -t 100 &
+$client -l $idir/file1.txt -t 200 -u $idir/file1.txt &
+$client -l $idir/file1.txt -t 100 &
+$client -l $idir/file1.txt -t 100 &
+$client -l $idir/file1.txt,$idir/smallfile1.txt
+$client -t 200 -l $idir/file2.txt
+$client -t 200 -l $idir/file2.txt
 
 # REMOVE
-$client -c ./tdir/file2.txt -t 200 -c ./tdir/smallfile1.txt
+$client -c $idir/file2.txt -t 200 -c $idir/smallfile1.txt
+
+# APPEND
+$client -a $idir/smallfile1.txt,$idir/smallfile2.txt,./out/app -t200 
 
 wait
+
+echo "   ----------+----------------------------------------------------------------------+----------------------------------+----------+-----------------+-----------------+"
 
 # echo "SENDING SIGHUP SIGNAL"

@@ -18,7 +18,6 @@
 
 // Just for summary uses
 #define TIMES(n, x) for (int i = 0; i < n; ++i) { x; }
-#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":"B ")
 
 typedef struct FSCacheEntry_t {
     int owner;                   // owner of the lock (if locked, otherwise -1)
@@ -799,26 +798,30 @@ void summary() {
     static char CV = '|';
     static char CH = '-';
 
+    int tTSize = 100;
+    int fCSize = 32;
+    int sCSize = (100-fCSize-5)/3;
+
     // Header
-    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
-    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+    LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 
     // Separator
-    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, 14, "", CV, 12, "    used    ", CV, 12, "    max    ", CV, 12, "    peak    ", CV);
+    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, fCSize, "", CV, sCSize, "    used    ", CV, sCSize, "    max    ", CV, sCSize, "    peak    ", CV);
 
     // Separator
-    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
-    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+    LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 
     // Cache size (Slot)
-    LOG_EMPTY("  %c%-*s%c %*d %c %*d %c %*d %c\n", CV, 14, "size (slot)", CV, 10, slotU, CV, 10, slotM, CV, 10, slotP, CV);
+    LOG_EMPTY("  %c%-*s%c %*d %c %*d %c %*d %c\n", CV, fCSize, "size (slot)", CV, sCSize-2, slotU, CV, sCSize-2, slotM, CV, sCSize-2, slotP, CV);
 
     // Cache size (MB)
-    LOG_EMPTY("  %c%-*s%c %*.2f%s %c %*.2f%s %c %*.2f%s %c\n", CV, 14, "size (MB)", CV, 8, BYTES(bytesU), CV, 8, BYTES(bytesM), CV, 8, BYTES(bytesP), CV);
+    LOG_EMPTY("  %c%-*s%c %*.2f %s %c %*.2f %s %c %*.2f %s %c\n", CV, fCSize, "size (MB)", CV, sCSize-5, BYTES(bytesU), CV, sCSize-5, BYTES(bytesM), CV, sCSize-5, BYTES(bytesP), CV);
 
     // Separator
-    LOG_EMPTY("  %c", CC); TIMES(14, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); 
-    LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+    LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 
     // Files left
     if (gCache.slotUsed > 0) {
@@ -828,7 +831,7 @@ void summary() {
             // File data
             int bytes = item->file.contentLen;
             // Log
-            LOG_EMPTY("  %c%-*s%c %*.2f%s %c\n", CV, 40, item->file.name, CV, 8, BYTES(bytes), CV);
+            LOG_EMPTY("  %c%-*s%c %*.2f %s %c\n", CV, tTSize-sCSize-3, item->file.name, CV, sCSize-5, BYTES(bytes), CV);
             // Next
             item = item->pre;
             depth++;
@@ -836,5 +839,5 @@ void summary() {
     } else {
         LOG_EMPTY("  %c              No file left in the server             %c\n", CV, CV);
     }
-    LOG_EMPTY("  %c", CC); TIMES(40, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(12, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+    LOG_EMPTY("  %c", CC); TIMES(tTSize-sCSize-3, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 }

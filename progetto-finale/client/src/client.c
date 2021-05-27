@@ -11,9 +11,6 @@
 #include <common.h>
 #include <serverapi.h>
 
-// Just for better logging
-#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":"B ")
-
 // ======================================== DECLARATIONS: Types =====================================================
 
 typedef enum {
@@ -443,7 +440,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("[REA-RNDM] count:'%16d' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.val, dirname,
+            LOG_INFO("REA-RNDM |  dir: %-62s | count: %25d | %-8s | Wr %9.2f %s | Re %9.2f %s |", dirname, option.val,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -513,7 +510,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[WRI-FILE] file:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, dirname,
+                LOG_INFO("WRI-FILE | file: %-62s | dir: %-27s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -560,7 +557,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("[APP-FILE] file:'%-32s' dir: '%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", fileToModify, dirname,
+            LOG_INFO("APP-FILE | file: %-62s | dir: %-27s | %-8s | Wr %9.2f %s | Re %9.2f %s |", fileToModify, dirname,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -607,7 +604,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[REA-FILE] file:'%-32s' size: %8.2f%s. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname, BYTES(buffSize),
+                LOG_INFO("REA-FILE | file: %-62s | dir: %-27s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -637,7 +634,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[LOC-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                LOG_INFO("LOC-FILE | file: %-62s | %32s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -668,7 +665,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[UNL-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                LOG_INFO("UNL-FILE | file: %-62s | %32s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -698,7 +695,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("[REM-FILE] file:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", pathname,
+                LOG_INFO("REM-FILE | file: %-62s | %32s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -719,7 +716,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("[WRI-DIRE] dir:'%-32s'. %-8s. Sent %8.2f%s, Received %8.2f%s", option.dirname,
+            LOG_INFO("WRI-DIRE |  dir: %-62s | %32s | %-8s | Wr %9.2f %s | Re %9.2f %s |", option.dirname, " ",
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
