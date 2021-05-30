@@ -8,6 +8,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <logger.h>
+
 static int gSocketFd   = -1;
 static char* gBuffer   = NULL;
 static int gBufferSize = 0;

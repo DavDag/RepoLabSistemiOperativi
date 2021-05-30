@@ -28,6 +28,13 @@ typedef struct {
     int maxFileCapacityMB;   // 1MB ~> 512MB
 } FSConfig_t;
 
+// State
+typedef struct {
+    long long bytesUsedCount;
+    int slotsUsedCount;
+    int capacityMissCount;
+} FSInfo_t;
+
 typedef struct { int fd; int status; } FSLockNotification_t;
 
 /**
@@ -172,5 +179,12 @@ int fs_unlock(int client, FSFile_t file);
  * \retval >0: on error. possible values [ ]
  */
 int fs_clean(int client, ClientSession_t* session);
+
+/**
+ * Get state of the system.
+ * 
+ * \retval struct: containing the state of the 'file-system'
+ */
+FSInfo_t fs_get_infos();
 
 #endif // FILE_SYSTEM_H

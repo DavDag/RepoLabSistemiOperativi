@@ -7,8 +7,12 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <time.h>
 
 #include <common.h>
+
+#define LOG_TIMESTAMP
+#include <logger.h>
 
 #include "circ_queue.h"
 #include "file_system.h"
@@ -25,6 +29,14 @@
 #define SET_CONNECTION 1002 // Worker => Select : readd client
 
 #define MAX_FILE_SIZE 32
+
+#define LOCK_THREAD_ID 1001
+#define OPT_OPEN_EMPTY  (50 | FLAG_EMPTY)
+#define OPT_OPEN_CREATE (50 | FLAG_CREATE)
+#define OPT_OPEN_LOCK   (50 | FLAG_LOCK)
+#define OPT_OPEN_WRITE  (50 | FLAG_CREATE | FLAG_LOCK)
+
+#define ELAPSED_MICR_S(e,b) (((e.tv_sec - b.tv_sec) * 1e6 + (e.tv_nsec - b.tv_nsec) * 1e-3))
 
 // ======================================== DECLARATIONS: Types =====================================================
 
@@ -49,6 +61,7 @@ SockMessage_t handleWork(int, int, SockMessage_t);
 void handleError(int, SockMessage_t*);
 FSFile_t copyRequestIntoFile(SockMessage_t);
 FSFile_t deepCopyRequestIntoFile(SockMessage_t);
+void log_into_file(SockMessage_t*, RespStatus_t, long long, long long, long long, int, int);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -69,6 +82,9 @@ static fd_set gFdSet;
 static int gSocketFd = -1;
 static int gMaxFd    = 0;
 
+static FILE* gLogFile = NULL;
+static struct timespec gServerStartTime;
+
 // Multiples write using the same pipe are guaranteed to be atomic under certain sizes (PIPE_BUF)
 // https://pubs.opengroup.org/onlinepubs/9699919799/functions/write.html#tag_16_685
 static int mainToSelectPipe[2]         = { -1, -1 };
@@ -88,6 +104,12 @@ int initializeServer(ServerConfig_t configs) {
 
     // Registering function to call on exit
     atexit(cleanup);
+
+    // Open log file
+    if ((gLogFile = fopen(configs.logFilename, "wb")) == NULL) {
+        LOG_ERRNO("[#MN] Error opening log file");
+        return RES_ERROR;
+    }
 
     // Signals
     gSigIntReceived  = 0;
@@ -127,6 +149,7 @@ int initializeServer(ServerConfig_t configs) {
 
 int runServer() {
     LOG_INFO("[#MN] Server running ...");
+    clock_gettime(CLOCK_MONOTONIC, &gServerStartTime);
 
     // Run until signal is received
     int newConnFd = -1;
@@ -164,7 +187,7 @@ int terminateSever() {
     LOG_VERB("[#MN] Waiting worker threads...");
     for (int i = 0; i < gConfigs.numWorkers; ++i)
         if (pthread_join(gWorkerThreads[i], NULL) < 0)
-        LOG_ERRNO("[#MN] Error joining worker thread #%d", i + 1);
+            LOG_ERRNO("[#MN] Error joining worker thread #%d", i + 1);
     free(gWorkerThreads);
     free(gWorkerArgs);
 
@@ -212,6 +235,13 @@ int terminateSever() {
 
     // Close FS & Log execution summary
     terminateFileSystem();
+
+    // Close log file
+    if (fflush(gLogFile) != 0)
+        LOG_ERRNO("[#MN] Error flushing log file");
+    if (fclose(gLogFile) != 0)
+        LOG_ERRNO("[#MN] Error closing log file");
+    gLogFile = NULL;
 
     // Returns success
     return RES_OK;
@@ -294,7 +324,14 @@ void cleanup() {
     // Delete socket fd
     if (unlink(gConfigs.socketFilename) < 0)
         LOG_ERRNO("[#MN] Error deleting socket file");
-    
+
+    // Close log file
+    if (gLogFile) {
+        fflush(gLogFile);
+        fclose(gLogFile);
+        gLogFile = NULL;
+    }
+
     LOG_VERB("[#MN] Cleanup terminated");
 }
 
@@ -307,8 +344,9 @@ void* workerThreadFun(void* args) {
 
     // Stop working when SIGINT / SIGQUIT received and on SIGHUP when there're no more clients connected
     while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || gNumClientConnected > 0)) {
-        // Reset item
+        // Vars
         CircQueueItemPtr_t item = NULL;
+        long long bytesRead = 0, bytesWrote = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gWorkMutex);
@@ -327,20 +365,22 @@ void* workerThreadFun(void* args) {
             LOG_VERB("[#%.2d] Queue empty", threadID);
             continue;
         }
+        struct timespec begin, end;
+        clock_gettime(CLOCK_MONOTONIC, &begin);
 
         // Get FD
         int client = (intptr_t) item;
 
         // Read message from client
         SockMessage_t requestMsg;
-        if ((res = readMessage(client, &_inn_buffer, &innerBufferSize, &requestMsg)) < 0) {
+        if ((bytesRead = readMessage(client, &_inn_buffer, &innerBufferSize, &requestMsg)) < 0) {
             LOG_ERRNO("[#SE] Error reading message");
             // Close socket
             if (close(client) < 0)
                 LOG_ERRNO("[#SE] Error closing socket #%02d", client);
             continue;
         }
-        if (res == 0) {
+        if (bytesRead == 0) {
             // Client disconnected !
             if (close(client) < 0) LOG_ERRNO("[#SE] Error closing socket #%02d", client);
             // Handle disconnection
@@ -369,16 +409,19 @@ void* workerThreadFun(void* args) {
         } else {
             LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
             // Write response to client
-            if (writeMessage(client, &_inn_buffer, &innerBufferSize, &responseMsg) == -1)
+            if ((bytesWrote = writeMessage(client, &_inn_buffer, &innerBufferSize, &responseMsg)) == -1)
                 LOG_ERRNO("Error sending response");
             // Readd descriptor to set
             int messageToSend[2] = { SET_CONNECTION, client };
             writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int));
         }
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        // Log request
+        log_into_file(&requestMsg, responseMsg.response.status, ELAPSED_MICR_S(end, begin), bytesRead, bytesWrote, threadID, client);
        
         // Release resources
+        freeMessageContent(&requestMsg , 1);
         freeMessageContent(&responseMsg, 1);
-        freeMessageContent(&requestMsg, 1);
     }
     free(_inn_buffer);
     return NULL;
@@ -488,6 +531,7 @@ void* lockThreadFun(void* args) {
     while (!gSigIntReceived && !gSigQuitReceived && !gShouldStopWorking) {
         // Reset item
         CircQueueItemPtr_t item = NULL;
+        long long bytesWrote = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gLockMutex);
@@ -526,7 +570,7 @@ void* lockThreadFun(void* args) {
 
         // Write response to client
         LOG_VERB("[#LK] Notification arrived. Sending %d to %d...", msg.response.status, notification.fd);
-        if (writeMessage(notification.fd, &_inn_buff, &innerBufferSize, &msg) == -1)
+        if ((bytesWrote = writeMessage(notification.fd, &_inn_buff, &innerBufferSize, &msg)) == -1)
             LOG_ERRNO("Error sending response");
 
         // Readd descriptor to set
@@ -535,6 +579,10 @@ void* lockThreadFun(void* args) {
 
         // Release memory
         free(item);
+        
+        // Log request
+        SockMessage_t tmp = { .type = MSG_REQ_LOCK_FILE, .uid = EMPTY_UUID };
+        log_into_file(&tmp, msg.response.status, 0LL, 0LL, bytesWrote, LOCK_THREAD_ID, notification.fd);
     }
     free(_inn_buff);
     return NULL;
@@ -980,4 +1028,56 @@ FSFile_t deepCopyRequestIntoFile(SockMessage_t msg) {
         .nameLen    = nLen,
     };
     return fs_file;
+}
+
+void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, long long bytesRead, long long bytesWrote, int workingThreadID, int client) {
+    SockMessageType_t type = msg->type;
+    if (type == MSG_REQ_OPEN_FILE) {
+        type = 50 | msg->request.flags;
+    }
+
+    // Table for codes
+    static const char* const opTable[] = {
+        [MSG_NONE]               = "--",
+        [MSG_RESP_SIMPLE]        = "??",
+        [MSG_RESP_WITH_FILES]    = "??",
+        [MSG_REQ_APPEND_TO_FILE] = "AF",
+        [MSG_REQ_CLOSE_FILE]     = "CF",
+        [MSG_REQ_CLOSE_SESSION]  = "CS",
+        [MSG_REQ_LOCK_FILE]      = "LF",
+        [OPT_OPEN_CREATE]        = "OC",
+        [OPT_OPEN_EMPTY]         = "OE",
+        [MSG_REQ_OPEN_FILE]      = "OF",
+        [OPT_OPEN_LOCK]          = "OL",
+        [MSG_REQ_OPEN_SESSION]   = "OS",
+        [OPT_OPEN_WRITE]         = "OW",
+        [MSG_REQ_READ_FILE]      = "RF",
+        [MSG_REQ_REMOVE_FILE]    = "RM",
+        [MSG_REQ_READ_N_FILES]   = "RN",
+        [MSG_REQ_UNLOCK_FILE]    = "UF",
+        [MSG_REQ_WRITE_FILE]     = "WF",
+    };
+
+    // Calc timestamp
+    struct timespec opTime;
+    clock_gettime(CLOCK_MONOTONIC, &opTime);
+    long long timeInMsFromBegin = ELAPSED_MICR_S(opTime, gServerStartTime);
+
+    // Copy var
+    lock_mutex(&gNumClientMutex);
+    int connectedClientCount = gNumClientConnected;
+    unlock_mutex(&gNumClientMutex);
+
+    // Log data
+    lock_mutex(&gLogMutex);
+    if (workingThreadID == LOCK_THREAD_ID) {
+        FSInfo_t info = fs_get_infos();
+        LOG_EMPTY_INTO_STREAM(gLogFile, "T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", timeInMsFromBegin, msec,
+            opTable[type], client, connectedClientCount, bytesRead, bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+    } else {
+        FSInfo_t info = fs_get_infos();
+        LOG_EMPTY_INTO_STREAM(gLogFile, "T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", timeInMsFromBegin, msec,
+            workingThreadID, opTable[type], client, connectedClientCount, bytesRead, bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+    }
+    unlock_mutex(&gLogMutex);
 }

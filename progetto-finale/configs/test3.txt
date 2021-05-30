@@ -1,5 +1,5 @@
 socketFile=./cs_sock
-logFile=../log-test3.txt
+logFile=./log-test3.txt
 numWorkers=8
 maxClients=64
 maxSizeMB=32

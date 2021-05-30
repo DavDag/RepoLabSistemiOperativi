@@ -1,16 +1,13 @@
-#!/bin/sh
+#!/bin/bash
 
 prefix="-f ./cs_sock -p"
 client="$1 $prefix"
 idir="$(pwd)/tdir"
 
-sleep 1
-echo "   ----------+----------------------------------------------------------------------+----------------------------------+----------+-----------------+-----------------+"
-
 # SEND DIRECTORY
 $client -w $idir/simpledir -t 200 -w $idir/genericdir
 $client -w $idir/recursivedir -t 200 -w $idir/longdir
-$client -w $idir/bigdir,n=10 -D ./out/cachemisses
+$client -w $idir/bigdir,n=10 -D ./out/capacitymisses
 
 # SEND FILE / FILES
 $client -W $idir/file1.txt,$idir/file2.txt -t 200 -W $idir/smallfile1.txt,$idir/smallfile2.txt
@@ -42,7 +39,5 @@ $client -c $idir/file2.txt -t 200 -c $idir/smallfile1.txt
 $client -a $idir/smallfile1.txt,$idir/smallfile2.txt,./out/app -t200 
 
 wait
-
-echo "   ----------+----------------------------------------------------------------------+----------------------------------+----------+-----------------+-----------------+"
 
 # echo "SENDING SIGHUP SIGNAL"

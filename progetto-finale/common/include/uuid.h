@@ -27,6 +27,7 @@
 // Total of 128 bits.
 // Using version 4 with variant 1
 typedef struct { union { int i; char b[4]; } data[4]; } UUID_t;
+#define EMPTY_UUID ((UUID_t) { .data = { { .i = 0 }, { .i = 0 }, { .i = 0 }, { .i = 0 } } })
 
 // Ensure correct size
 static_assert(sizeof(UUID_t) == 16, "Size of UUID must be 128 bits or 16 bytes");

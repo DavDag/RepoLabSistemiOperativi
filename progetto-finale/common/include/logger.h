@@ -43,7 +43,7 @@
 // NOT THREAD-SAFE
 #define LOG_EMPTY(...) LOG_EMPTY_INTO_STREAM(stdout, __VA_ARGS__)
 
-static pthread_mutex_t gLogMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t gLogMutex;
 
 void set_log_level(int new_level);
 int get_log_level();
@@ -53,11 +53,7 @@ static void custom_formatted_log(FILE* stream, int loglevel, const char* file, c
     // Constants
     static const char* const DESCR[] = { "C", "!", "E", "W", "I", "V" };
 
-#ifndef LOG_WITHOUT_COLORS
     static const char* const COLOR[] = { "\033[91m", "\033[35m", "\033[31m", "\033[33m", "\033[0m", "\033[90m", "\033[0m" };
-#else
-    static const char* const COLOR[] = { "", "", "", "", "", "", "" };
-#endif
 
     // Save copy of errno
     int errno_s = errno;

@@ -8,6 +8,7 @@
 
 #include "server.h"
 #include <common.h>
+#include <logger.h>
 
 // #define DEBUG_LOG
 

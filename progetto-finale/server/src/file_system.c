@@ -5,6 +5,7 @@
 #include <threads.h>
 #include <pthread.h>
 
+#include <logger.h>
 #include <common.h>
 
 #define EMPTY_OWNER -1
@@ -27,10 +28,10 @@ typedef struct FSCacheEntry_t {
 } FSCacheEntry_t;
 
 typedef struct {
-    int slotUsed, slotMax;   // Total slots managment
-    int bytesUsed, bytesMax; // Total bytes managment
-    FSCacheEntry_t* head;    // Ptr to newest entry used
-    FSCacheEntry_t* tail;    // Ptr to oldest entry used (LRU)
+    int slotUsed, slotMax;         // Total slots managment
+    long long bytesUsed, bytesMax; // Total bytes managment
+    FSCacheEntry_t* head;          // Ptr to newest entry used
+    FSCacheEntry_t* tail;          // Ptr to oldest entry used (LRU)
 } FSCache_t;
 
 // =============================================================================================
@@ -45,8 +46,8 @@ static pthread_mutex_t* gLockMutex = NULL;
 
 // SUMMARY Data
 static int gMaxSlotUsed  = 0;
-static int gMaxBytesUsed = 0;
-static int gCacheMisses  = 0;
+static long long gMaxBytesUsed = 0;
+static int gCapacityMisses  = 0;
 static int gQueryCount   = 0;
 
 #define INCREASE_QUERY_COUNT (++gQueryCount)
@@ -66,6 +67,18 @@ void log_cache_entirely();
 void summary();
 
 // =============================================================================================
+
+FSInfo_t fs_get_infos() {
+    // Atomic read
+    lock_mutex(&gFSMutex);
+    FSInfo_t result = {
+        .bytesUsedCount = gCache.bytesUsed,
+        .slotsUsedCount = gCache.slotUsed,
+        .capacityMissCount = gCapacityMisses
+    };
+    unlock_mutex(&gFSMutex);
+    return result;
+}
 
 int initializeFileSystem(FSConfig_t configs, CircQueue_t* lockQueue, pthread_cond_t* lockCond, pthread_mutex_t* lockMutex) {
     LOG_VERB("[#FS] Initializing file system ...");
@@ -603,7 +616,7 @@ int fs_clean(int client, ClientSession_t* session) {
 
 void log_cache_entirely(const char* const after) {
     LOG_VERB("========= FS after: %7s =========", after);
-    LOG_VERB("Cache slot in use: %d, slot max: %d, B in use: %d, B max: %d", gCache.slotUsed, gCache.slotMax, gCache.bytesUsed, gCache.bytesMax);
+    LOG_VERB("Cache slot in use: %d, slot max: %d, B in use: %lld, B max: %lld", gCache.slotUsed, gCache.slotMax, gCache.bytesUsed, gCache.bytesMax);
     LOG_VERB("Cache head: %p, tail: %p", gCache.head, gCache.tail);
     LOG_VERB("================================");
     int depth = 0;
@@ -748,21 +761,43 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         gCache.bytesUsed -= (item->file.nameLen + item->file.contentLen);
         --gCache.slotUsed;
 
-        // Increment cache misses
-        gCacheMisses += 1;
+        // Increment capacity misses
+        gCapacityMisses += 1;
     }
 
     if (ejectedFilesBufIndex) {
-        // Increment cache misses
-        gCacheMisses += ejectedFilesBufIndex;
+        // Increment capacity misses
+        gCapacityMisses += ejectedFilesBufIndex;
 
         // Save values and release entries memory
         FSFile_t* files = (FSFile_t*) mem_malloc(ejectedFilesBufIndex * sizeof(FSFile_t));
         for (int i = 0; i < ejectedFilesBufIndex; ++i) {
-            files[i] = ejectedFilesBuf[i]->file;
-            free(ejectedFilesBuf[i]->waitingLockQueue->data);
-            free(ejectedFilesBuf[i]->waitingLockQueue);
-            free(ejectedFilesBuf[i]);
+            FSCacheEntry_t* entry = ejectedFilesBuf[i];
+            files[i] = entry->file;
+
+            // Notify all clients waiting for lock
+            CircQueueItemPtr_t item;
+            while (tryPop(entry->waitingLockQueue, &item) == 1) {
+                // Create notification to send
+                FSLockNotification_t* notification = (FSLockNotification_t*) mem_malloc(sizeof(FSLockNotification_t));
+                notification->fd     = (intptr_t) item;
+                notification->status = FS_FILE_NOT_EXISTS; // File has been removed
+                // Push into lock queue
+                while (tryPush(gLockQueue, notification) != 1) {
+                    // Try again fastest possible.
+                    // It blocks the entire server and needs to be done fast
+                }
+                LOG_VERB("[#FS] Removed %d from lock req queue", notification->fd);
+                // Signal queue
+                lock_mutex(gLockMutex);
+                notify_one(gLockCond);
+                unlock_mutex(gLockMutex);
+            }
+
+            // Release memory
+            free(entry->waitingLockQueue->data);
+            free(entry->waitingLockQueue);
+            free(entry);
         }
 
         // Pass values
@@ -790,8 +825,8 @@ void deepCopyFile(FSFile_t file, FSFile_t* outFile) {
 
 void summary() {
     // Calc stats
-    int slotU  = gCache.slotUsed , slotM  = gCache.slotMax , slotP  = gMaxSlotUsed;
-    int bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
+    int slotU = gCache.slotUsed , slotM = gCache.slotMax , slotP = gMaxSlotUsed;
+    long long bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
 
     // To write more readable code
     static char CC = '+';
@@ -837,7 +872,7 @@ void summary() {
             depth++;
         }
     } else {
-        LOG_EMPTY("  %c              No file left in the server             %c\n", CV, CV);
+        LOG_EMPTY("  %c                                     No file left in the server                                   %c\n", CV, CV);
     }
     LOG_EMPTY("  %c", CC); TIMES(tTSize-sCSize-3, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 }

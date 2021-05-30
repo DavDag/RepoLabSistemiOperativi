@@ -1,5 +1,7 @@
 #include "circ_queue.h"
 
+#include <logger.h>
+
 CircQueue_t* createQueue(int size) {
     // Create queue
     CircQueue_t* queue = (CircQueue_t*) mem_malloc(sizeof(CircQueue_t));
