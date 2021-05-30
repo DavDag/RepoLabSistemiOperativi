@@ -25,7 +25,10 @@ $client -r $idir/file1.txt,$idir/smallfile1.txt -t 200 -r $idir/file1.txt
 # LOCK / UNLOCK
 $client -l $idir/file1.txt -t 200 &
 $client -l $idir/file1.txt -t 100 &
+$client -l $idir/file1.txt -t 100 &
 $client -l $idir/file1.txt -t 200 -u $idir/file1.txt &
+$client -l $idir/file1.txt -t 100 &
+$client -l $idir/file1.txt -t 100 &
 $client -l $idir/file1.txt -t 100 &
 $client -l $idir/file1.txt -t 100 &
 $client -l $idir/file1.txt,$idir/smallfile1.txt

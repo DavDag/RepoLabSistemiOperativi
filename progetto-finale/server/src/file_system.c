@@ -363,6 +363,8 @@ int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
         // Check if file is owned by someone else
         if (entry->owner != client) {
             res = FS_CLIENT_NOT_ALLOWED;
+        } else if (file.contentLen + file.nameLen > gCache.bytesMax) {
+            res = FS_FILE_TOO_BIG;
         } else {
             // Release memory
             if (entry->file.content) free((char*) entry->file.content);
@@ -409,6 +411,8 @@ int fs_append(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
         // Check if file is owned by someone else
         if (entry->owner != client && entry->owner != EMPTY_OWNER) {
             res = FS_CLIENT_NOT_ALLOWED;
+        } else if (file.contentLen + file.nameLen + entry->file.contentLen > gCache.bytesMax) {
+            res = FS_FILE_TOO_BIG;
         } else {
             // Resize file content buffer to be large enough
             int newContentLen      = file.contentLen + entry->file.contentLen;

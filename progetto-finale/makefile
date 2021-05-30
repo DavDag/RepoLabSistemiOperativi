@@ -27,6 +27,11 @@ $(SUBDIRS):
 CLIENT_EXE := ./client/$(BINARIES_DIR)/main
 SERVER_EXE := ./server/$(BINARIES_DIR)/main
 
+all-db:
+	$(eval CFLAGS += -DLOG_DEBUG)
+	$(MAKE) -C . clean
+	$(MAKE) -C . all
+
 clean: resettest
 	@rm -f ./log-test1.txt
 	@rm -f ./log-test2.txt

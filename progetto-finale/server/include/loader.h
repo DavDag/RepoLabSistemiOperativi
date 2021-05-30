@@ -13,6 +13,7 @@
 // #define DEBUG_LOG
 
 #define MAX_FILE_PATH_LEN 256
+#define BASE_HASHTABLE_SIZE 512*512
 
 /**
  * Read configs from file.
@@ -210,8 +211,8 @@ static ServerConfig_t readConfigs(const char* filename) {
     }
     
     // Table size must be processed after all config file is read
-    // size = numSlot * ratio + 4096.
-    configs.fsConfigs.tableSize = 4096 + (configs.fsConfigs.maxFileCapacitySlot * tableRatio[configs.fsConfigs.tableSize - 1]);
+    // size = numSlot * ratio + BASE_HASHTABLE_SIZE.
+    configs.fsConfigs.tableSize = BASE_HASHTABLE_SIZE + (configs.fsConfigs.maxFileCapacitySlot * tableRatio[configs.fsConfigs.tableSize - 1]);
 
     // Returns configs
     return configs;

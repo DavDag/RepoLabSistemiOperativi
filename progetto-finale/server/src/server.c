@@ -965,6 +965,7 @@ void handleError(int status, SockMessage_t* response) {
     {
         case FS_FILE_ALREADY_EXISTS:
         case FS_FILE_NOT_EXISTS:
+        case FS_FILE_TOO_BIG:
         case SESSION_FILE_ALREADY_OPENED:
         {
             response->response.status = RESP_STATUS_INVALID_ARG;

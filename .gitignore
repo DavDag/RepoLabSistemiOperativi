@@ -5,3 +5,8 @@ bin/
 progetto-finale/.vscode/settings.json
 test-compression/test.txt
 progetto-finale/out/
+progetto-finale/tdir/bigdir/
+progetto-finale/tdir/longdir/
+progetto-finale/tdir/bigdir/gen_files.py
+progetto-finale/tdir/longdir/gen_files.py
+log-test*.txt

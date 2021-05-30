@@ -7,6 +7,7 @@
 #define FS_FILE_NOT_EXISTS        102
 #define FS_CLIENT_NOT_ALLOWED     103
 #define FS_CLIENT_WAITING_ON_LOCK 104
+#define FS_FILE_TOO_BIG           105
 
 #include <pthread.h>
 
@@ -119,7 +120,7 @@ int fs_obtain_n(int client, int n, FSFile_t** outFiles, int* outFilesCount);
  * \param outFilesCount: ejected files count
  * 
  * \retval  0: on success
- * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS, FS_FILE_TOO_BIG ]
  */
 int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
@@ -132,7 +133,7 @@ int fs_modify(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount
  * \param outFilesCount: ejected files count
  * 
  * \retval  0: on success
- * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS ]
+ * \retval >0: on error. possible values [ FS_CLIENT_NOT_ALLOWED, FS_FILE_NOT_EXISTS, FS_FILE_TOO_BIG ]
  */
 int fs_append(int client, FSFile_t file, FSFile_t** outFiles, int* outFilesCount);
 
