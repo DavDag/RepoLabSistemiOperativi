@@ -111,6 +111,7 @@ static const char* const CLIENT_USAGE =
 
 static int gNftwExploredFileCount = 0;
 static int gNftwExploredFileLimit = 0;
+static char* gWriteDir      = NULL;
 
 // ======================================= DEFINITIONS: client.h functions ==========================================
 
@@ -704,9 +705,17 @@ int handleOption(int index) {
 
         case OPT_WRITE_DIR_REQ:
         {
-            // Explore directory using ntfw
+            // Reset
             gNftwExploredFileCount = 0;
             gNftwExploredFileLimit = option.val;
+            gWriteDir              = NULL;
+
+            // Check if next option is '-D'
+            if ((index < optionsSize - 1) && (options[index + 1].type == OPT_WRITE_SAVE)) {
+                gWriteDir = options[index + 1].save_dirname;
+            }
+
+            // Explore directory using ntfw
             int status = SERVER_API_SUCCESS;
             if (nftw(option.dirname, nftwExplorFunc, 16, FTW_PHYS) == -1) {
                 LOG_ERRNO("Error exploring directory '%s'", option.dirname);
@@ -717,7 +726,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("WRI-DIRE |  dir: %-75s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", option.dirname, " ",
+            LOG_INFO("WRI-DIRE |  dir: %-75s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", option.dirname, gWriteDir,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -771,9 +780,9 @@ int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct F
     int status = SERVER_API_SUCCESS;
 
     // [1]
-    if ((status = openFile(fpath, FLAG_CREATE | FLAG_LOCK)) == SERVER_API_SUCCESS) {
+    if ((status = openFileWithDir(fpath, FLAG_CREATE | FLAG_LOCK, gWriteDir)) == SERVER_API_SUCCESS) {
         // [2]
-        if ((status = writeFile(fpath, NULL)) == SERVER_API_FAILURE)
+        if ((status = writeFile(fpath, gWriteDir)) == SERVER_API_FAILURE)
             LOG_ERRNO("Error writing file '%s'", fpath);
         // [3]
         if (closeFile(fpath) == SERVER_API_FAILURE) {

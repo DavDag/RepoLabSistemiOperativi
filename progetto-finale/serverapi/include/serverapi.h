@@ -50,6 +50,18 @@ int closeConnection(const char* sockname);
 int openFile(const char* pathname, int flags);
 
 /**
+ * Send a request for opening a file. (same as openFile but has a dirname attribute)
+ * 
+ * \param pathname: file to open
+ * \param flags   : opening mode: FLAG_EMPY, FLAG_CREATE, FLAG_LOCK. Can be composed using |
+ * \param dirname : where to save returned files. NULL to reject them
+ * 
+ * \retval  0: on success
+ * \retval -1: on error (errno set)
+ */
+int openFileWithDir(const char* pathname, int flags, const char* dirname);
+
+/**
  * Send a request for  reading a file.
  * 
  * \param pathname: file to read

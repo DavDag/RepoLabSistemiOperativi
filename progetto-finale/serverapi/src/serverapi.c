@@ -94,6 +94,10 @@ int closeConnection(const char* sockname) {
 }
 
 int openFile(const char* pathname, int flags) {
+    return openFileWithDir(pathname, flags, NULL);
+}
+
+int openFileWithDir(const char* pathname, int flags, const char* dirname) {
     int filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_OPEN_FILE' message
@@ -121,7 +125,7 @@ int openFile(const char* pathname, int flags) {
     
     // 2. Wait for server response
     freeMessageContent(&msg, 0);
-    return waitServerResponse(NULL);
+    return waitServerResponse(dirname);
 }
 
 int readFile(const char* pathname, void** buf, size_t* size) {
@@ -451,7 +455,7 @@ int waitServerResponse(const char* dirname) {
             LOG_VERB("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {
                 const MsgFile_t file = msg.response.files[i];
-                LOG_VERB("Resp file [#%.3d]: %s >> %dB", i, file.filename.abs.ptr, file.contentLen);
+                LOG_VERB("Resp file [#%.3d]: %s >> %8.4f %s", i, file.filename.abs.ptr, BYTES(file.contentLen));
             }
             if (dirname) {
                 for (int i = 0; i < msg.response.numFiles; ++i) {
