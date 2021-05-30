@@ -7,3 +7,4 @@ test-compression/test.txt
 progetto-finale/out/
 progetto-finale/tdir/bigdir/*.txt
 progetto-finale/tdir/longdir/*.txt
+progetto-finale/log-test*.txt
