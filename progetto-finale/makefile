@@ -41,22 +41,30 @@ addperm:
 	@chmod +rx $(CLIENT_EXE)
 	@chmod +rx $(SERVER_EXE)
 
+tdir/bigdir:
+	python3 ./tdir/gen_files.py -numFiles=8 -minSizeKb=512 -maxSizeKb=4096 -outDir=./tdir/bigdir
+
+tdir/longdir:
+	python3 ./tdir/gen_files.py -numFiles=64 -minSizeKb=1 -maxSizeKb=64 -outDir=./tdir/longdir
+
+files: tdir/bigdir tdir/longdir
+
 resettest:
 	@rm -rf ./out
 
-test1: addperm | resettest
+test1: resettest | addperm files
 	@valgrind --leak-check=full $(SERVER_EXE) ./configs/test1.txt & \
 	./scripts/test1.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test2: addperm | resettest
+test2: resettest | addperm files
 	@$(SERVER_EXE) ./configs/test2.txt & \
 	./scripts/test2.sh $(CLIENT_EXE); \
 	kill -1 $$!; \
 	wait;
 
-test3: addperm | resettest
+test3: resettest | addperm files
 	@$(SERVER_EXE) ./configs/test3.txt & \
 	timeout 30 ./scripts/test3.sh $(CLIENT_EXE); \
 	kill -2 $$!; \
