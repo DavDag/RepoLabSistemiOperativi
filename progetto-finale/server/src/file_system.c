@@ -44,10 +44,11 @@ static pthread_cond_t* gLockCond   = NULL;
 static pthread_mutex_t* gLockMutex = NULL;
 
 // SUMMARY Data
-static int gMaxSlotUsed  = 0;
+static int gMaxSlotUsed        = 0;
 static long long gMaxBytesUsed = 0;
-static int gCapacityMisses  = 0;
-static int gQueryCount   = 0;
+static int gCapacityMisses     = 0;
+static int gCapacityMissesMax  = 0;
+static int gQueryCount         = 0;
 
 #define INCREASE_QUERY_COUNT (++gQueryCount)
 
@@ -764,14 +765,12 @@ void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFil
         // Remove from cache sizes
         gCache.bytesUsed -= (item->file.nameLen + item->file.contentLen);
         --gCache.slotUsed;
-
-        // Increment capacity misses
-        gCapacityMisses += 1;
     }
 
     if (ejectedFilesBufIndex) {
         // Increment capacity misses
-        gCapacityMisses += ejectedFilesBufIndex;
+        gCapacityMisses    += ejectedFilesBufIndex;
+        gCapacityMissesMax  = MAX(gCapacityMissesMax, ejectedFilesBufIndex);
 
         // Save values and release entries memory
         FSFile_t* files = (FSFile_t*) mem_malloc(ejectedFilesBufIndex * sizeof(FSFile_t));
@@ -828,25 +827,21 @@ void deepCopyFile(FSFile_t file, FSFile_t* outFile) {
 }
 
 void summary() {
+    // To write more readable code
+    static char CC = '+', CV = '|', CH = '-';
+    int tTSize = 100, fCSize = 32, sCSize = (100-fCSize-5)/3;
+
     // Calc stats
     int slotU = gCache.slotUsed , slotM = gCache.slotMax , slotP = gMaxSlotUsed;
     long long bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
+    int capMisT = gCapacityMisses, capMisA = (int)((float) gCapacityMisses / gQueryCount * 100.0f), capMisM = gCapacityMissesMax;
 
-    // To write more readable code
-    static char CC = '+';
-    static char CV = '|';
-    static char CH = '-';
-
-    int tTSize = 100;
-    int fCSize = 32;
-    int sCSize = (100-fCSize-5)/3;
-
-    // Header
+    // Separator
     LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
     LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
 
-    // Separator
-    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, fCSize, "", CV, sCSize, "    used    ", CV, sCSize, "    max    ", CV, sCSize, "    peak    ", CV);
+    // Header 1
+    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, fCSize, "", CV, sCSize, "used", CV, sCSize, "max", CV, sCSize, "peak", CV);
 
     // Separator
     LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
@@ -857,6 +852,20 @@ void summary() {
 
     // Cache size (MB)
     LOG_EMPTY("  %c%-*s%c %*.2f %s %c %*.2f %s %c %*.2f %s %c\n", CV, fCSize, "size (MB)", CV, sCSize-5, BYTES(bytesU), CV, sCSize-5, BYTES(bytesM), CV, sCSize-5, BYTES(bytesP), CV);
+
+    // Separator
+    LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+
+    // Header 2
+    LOG_EMPTY("  %c%*s%c%*s%c%*s%c%*s%c\n", CV, fCSize, "", CV, sCSize, "Total", CV, sCSize, "Avg / (100 op)", CV, sCSize, "Max same time", CV);
+
+    // Separator
+    LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 
+    LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c\n", CC);
+
+    // Cache size (Slot)
+    LOG_EMPTY("  %c%-*s%c %*d %c %*d %c %*d %c\n", CV, fCSize, "capacity misses", CV, sCSize-2, capMisT, CV, sCSize-2, capMisA, CV, sCSize-2, capMisM, CV);
 
     // Separator
     LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 

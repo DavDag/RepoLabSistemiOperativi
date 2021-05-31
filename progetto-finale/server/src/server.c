@@ -1127,12 +1127,14 @@ void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, long
     lock_mutex(&gLogMutex);
     if (workingThreadID == LOCK_THREAD_ID) {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", timeInMsFromBegin, msec,
-            opTable[type], client, connectedClientCount, bytesRead, bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n",
+            UUID_to_String(msg->uid), timeInMsFromBegin, msec, opTable[type], client, connectedClientCount, bytesRead,
+            bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     } else {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", timeInMsFromBegin, msec,
-            workingThreadID, opTable[type], client, connectedClientCount, bytesRead, bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", 
+            UUID_to_String(msg->uid),timeInMsFromBegin, msec, workingThreadID, opTable[type], client, connectedClientCount, bytesRead,
+            bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     }
     unlock_mutex(&gLogMutex);
 }

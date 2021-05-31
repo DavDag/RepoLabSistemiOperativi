@@ -69,8 +69,6 @@ int freeOption(int);
 
 int nftwExplorFunc(const char* fpath, const struct stat* sb, int tflag, struct FTW* ftwbuf);
 
-void log_operation_data(CmdLineOptType_t option, const char* filename, const char* dirname, int status);
-
 // ======================================= DEFINITIONS: Global vars =================================================
 
 static const char* gSocketFilename = NULL;
