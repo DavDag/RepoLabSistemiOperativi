@@ -12,7 +12,7 @@
 
 static int gSocketFd   = -1;
 static char* gBuffer   = NULL;
-static int gBufferSize = 0;
+static size_t gBufferSize = 0;
 
 static size_t bytesRead    = 0;
 static size_t bytesWritten = 0;

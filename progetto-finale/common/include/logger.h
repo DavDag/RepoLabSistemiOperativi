@@ -43,7 +43,7 @@
 // NOT THREAD-SAFE
 #define LOG_EMPTY(...) LOG_EMPTY_INTO_STREAM(stdout, __VA_ARGS__)
 
-pthread_mutex_t gLogMutex;
+static pthread_mutex_t gLogMutex;
 
 void set_log_level(int new_level);
 int get_log_level();

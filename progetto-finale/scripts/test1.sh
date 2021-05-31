@@ -15,7 +15,7 @@ $client -w $idir/longdir -t $delay
 $client -W $idir/smallfile1.txt -t $delay
 $client -W $idir/smallfile2.txt,$idir/file1.txt,$idir/file2.txt -t $delay
  
-# # READ RND FILES
+# READ RND FILES
 $client -R -d ./out/rn0
 $client -R n=5 -d ./out/rn5
 $client -R n=7 -d ./out/rn7

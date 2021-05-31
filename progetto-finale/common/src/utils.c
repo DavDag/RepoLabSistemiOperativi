@@ -1,6 +1,8 @@
 #include "utils.h"
 #include "logger.h"
 
+#include <sys/stat.h>
+
 int parse_positive_integer(const char* str) {
     char* end = NULL;
     errno = 0;

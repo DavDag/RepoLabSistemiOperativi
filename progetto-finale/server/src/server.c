@@ -359,7 +359,7 @@ void* workerThreadFun(void* args) {
 
     // vars
     char* _inn_buffer   = NULL;
-    int innerBufferSize = 0;
+    size_t innerBufferSize = 0;
     const int threadID  = ((WorkerThreadArgs_t*) args)->id;
     int res = 0;
 
@@ -576,7 +576,7 @@ void* lockThreadFun(void* args) {
     pthread_sigmask(SIG_SETMASK, &set, NULL);
 
     // vars
-    int innerBufferSize = 1024;
+    size_t innerBufferSize = 1024;
     char* _inn_buff = (char*) mem_malloc(innerBufferSize * sizeof(char)); // Can be fixed because responses are always the same
     int res = 0;
     SockMessage_t msg;

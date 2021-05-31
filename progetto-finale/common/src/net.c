@@ -2,11 +2,14 @@
 
 #include "logger.h"
 #include "utils.h"
+#include "huffman_encoding.h"
+
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
 // #define DEBUG_MESSAGES
+// #define DEBUG_MESSAGES_CONTENT
 
 // ======================================= DECLARATIONS: Inner functions ============================================
 
@@ -24,16 +27,16 @@ void readFromBuffer(char** buf, void* data, size_t size);
 
 void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull);
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
-int calcMsgSize(SockMessage_t* msg);
+size_t calcMsgSize(SockMessage_t* msg);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
-#ifdef DEBUG_MESSAGES
-static thread_local int roff = 0;
+#ifdef DEBUG_MESSAGES_CONTENT
+_Thread_local static int roff = 0;
 #endif
 
-int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
-#ifdef DEBUG_MESSAGES
+size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) {
+#ifdef DEBUG_MESSAGES_CONTENT
     roff = 0;
     lock_mutex(&gLogMutex);
     LOG_EMPTY("\033[31mReading message...\n");
@@ -44,16 +47,16 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
     int res = -1;
 
     // 1. Read size from socket
-    int msgSize = 0;
-    if ((res = readN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
+    size_t msgSize = 0;
+    if ((res = readN(socketfd, (char*) &msgSize, sizeof(size_t))) != 1)
         return res;
 
     // Adjust buffer to fit message (if needed)
     if (msgSize > *size || *buf == NULL) {
         *buf  = (char*) mem_realloc(*buf, msgSize);
-        *size = msgSize;        
+        *size = msgSize;
     }
-    // Save to copies
+    // Save two copies
     char* buffer = *buf;
     char* bbegin = *buf;
 
@@ -143,7 +146,7 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
             break;
     }
 
-#ifdef DEBUG_MESSAGES
+#ifdef DEBUG_MESSAGES_CONTENT
     lock_mutex(&gLogMutex);
     roff = 0;
     LOG_EMPTY("\nread raw content:\n");
@@ -151,7 +154,7 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
 #endif
 
     // Raw content
-    int rawBytes = msgSize - (buffer - bbegin);
+    size_t rawBytes = msgSize - (buffer - bbegin);
     msg->raw_content = NULL;
     if (rawBytes) {
         // Read raw content
@@ -195,7 +198,7 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
 
 #ifdef DEBUG_MESSAGES
     lock_mutex(&gLogMutex);
-    LOG_EMPTY("\nMsg size: %d bytes, type %d, uuid: %s\n\033[0m", msgSize, msg->type, UUID_to_String(msg->uid));
+    LOG_EMPTY("Msg size: %lu bytes, type %d, uuid: %s\n\033[0m", msgSize, msg->type, UUID_to_String(msg->uid));
     unlock_mutex(&gLogMutex);
 #endif
 
@@ -203,12 +206,12 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
     return msgSize;
 }
 
-#ifdef DEBUG_MESSAGES
-static thread_local int woff = 0;
+#ifdef DEBUG_MESSAGES_CONTENT
+_Thread_local static int woff = 0;
 #endif
 
-int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
-#ifdef DEBUG_MESSAGES
+size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) {
+#ifdef DEBUG_MESSAGES_CONTENT
     woff = 0;
     lock_mutex(&gLogMutex);
     LOG_EMPTY("\033[32mSending message...\n");
@@ -219,7 +222,7 @@ int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
     int res = -1;
 
     // Adjust buffer to fit message (if needed)
-    int msgSize = calcMsgSize(msg);
+    size_t msgSize = calcMsgSize(msg);
     if (msgSize > *size || *buf == NULL) {
         *buf  = (char*) mem_realloc(*buf, msgSize);
         *size = msgSize;        
@@ -227,7 +230,7 @@ int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
     // Save two copies
     char* buffer = *buf;
     char* bbegin = *buf;
-    int rawBufferIndex = 0;
+    size_t rawBufferIndex = 0;
 
     // 1. Write message into buffer
 
@@ -309,7 +312,7 @@ int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
             break;
     }
 
-#ifdef DEBUG_MESSAGES
+#ifdef DEBUG_MESSAGES_CONTENT
     lock_mutex(&gLogMutex);
     woff = 0;
     LOG_EMPTY("\nwrite raw content:\n");
@@ -355,14 +358,14 @@ int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg) {
     }
 
     // 2. Write buffer (into socket)
-    if ((res = writeN(socketfd, (char*) &msgSize, sizeof(int))) != 1)
+    if ((res = writeN(socketfd, (char*) &msgSize, sizeof(size_t))) != 1)
         return res;
     if ((res = writeN(socketfd, bbegin, msgSize * sizeof(char))) != 1)
         return res;
 
 #ifdef DEBUG_MESSAGES
     lock_mutex(&gLogMutex);
-    LOG_EMPTY("\nMsg size: %d bytes, type %d, uuid: %s\n\033[0m", msgSize, msg->type, UUID_to_String(msg->uid));
+    LOG_EMPTY("Msg size: %lu bytes, type %d, uuid: %s\n\033[0m", msgSize, msg->type, UUID_to_String(msg->uid));
     unlock_mutex(&gLogMutex);
 #endif
 
@@ -450,14 +453,14 @@ int writeN(int fd, char* buf, size_t size) {
 
 void writeToBuffer(char** buf, const void* data, size_t size) {
     // buffer <= data
-#ifdef DEBUG_MESSAGES
+#ifdef DEBUG_MESSAGES_CONTENT
     lock_mutex(&gLogMutex);
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < size && woff < 128; ++i) {
         char c = (((char*) data)[i]) & 0x000000FF;
         LOG_EMPTY("%.2X(%c) ", c & 0x000000FF, (c < 32 || c > 126) ? '?' : c);
-        woff = (woff + 1) % 8;
-        if (woff == 4) LOG_EMPTY(" ");
-        if (woff == 0) LOG_EMPTY("\n");
+        ++woff;
+        if (woff % 8 == 4) LOG_EMPTY(" ");
+        if (woff % 8 == 0) LOG_EMPTY("\n");
     }
     unlock_mutex(&gLogMutex);
 #endif
@@ -467,14 +470,14 @@ void writeToBuffer(char** buf, const void* data, size_t size) {
 
 void readFromBuffer(char** buf, void* data, size_t size) {
     // buffer => data
-#ifdef DEBUG_MESSAGES
+#ifdef DEBUG_MESSAGES_CONTENT
     lock_mutex(&gLogMutex);
-    for (int i = 0; i < size; ++i) {
+    for (int i = 0; i < size && roff < 128; ++i) {
         char c = ((*buf)[i]) & 0x000000FF;
         LOG_EMPTY("%.2X(%c) ", c & 0x000000FF, (c < 32 || c > 126) ? '?' : c);
-        roff = (roff + 1) % 8;
-        if (roff == 4) LOG_EMPTY(" ");
-        if (roff == 0) LOG_EMPTY("\n");
+        ++roff;
+        if (roff % 8 == 4) LOG_EMPTY(" ");
+        if (roff % 8 == 0) LOG_EMPTY("\n");
     }
     unlock_mutex(&gLogMutex);
 #endif
@@ -490,8 +493,8 @@ void convertPtrToOffset(char* begin, MsgPtr_t* data) {
     data->i = data->ptr - begin; 
 }
 
-int calcMsgSize(SockMessage_t* msg) {
-    int totalSize = 0;
+size_t calcMsgSize(SockMessage_t* msg) {
+    size_t totalSize = 0;
     totalSize += sizeof(UUID_t);
     totalSize += sizeof(SockMessageType_t);
     switch (msg->type)

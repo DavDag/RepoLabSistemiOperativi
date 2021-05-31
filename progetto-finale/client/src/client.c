@@ -442,7 +442,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("REA-RNDM |  dir: %-75s | count: %12d | %-8s | Wr %9.2f %s | Re %9.2f %s |", dirname, option.val,
+            LOG_INFO("REA-RNDM |  dir: %-100s | count: %12d | %-8s | Wr %9.2f %s | Re %9.2f %s |", dirname, option.val,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -512,7 +512,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("WRI-FILE | file: %-75s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
+                LOG_INFO("WRI-FILE | file: %-100s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -559,7 +559,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("APP-FILE | file: %-75s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", fileToModify, dirname,
+            LOG_INFO("APP-FILE | file: %-100s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", fileToModify, dirname,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }
@@ -606,7 +606,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("REA-FILE | file: %-75s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
+                LOG_INFO("REA-FILE | file: %-100s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, dirname,
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -636,7 +636,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("LOC-FILE | file: %-75s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
+                LOG_INFO("LOC-FILE | file: %-100s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -667,7 +667,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("UNL-FILE | file: %-75s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
+                LOG_INFO("UNL-FILE | file: %-100s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -697,7 +697,7 @@ int handleOption(int index) {
 
                 // Retrieve last operation data
                 ApiBytesInfo_t info = getBytesData();
-                LOG_INFO("REM-FILE | file: %-75s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
+                LOG_INFO("REM-FILE | file: %-100s | %19s | %-8s | Wr %9.2f %s | Re %9.2f %s |", pathname, " ",
                     (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             }
             break;
@@ -726,7 +726,7 @@ int handleOption(int index) {
 
             // Retrieve last operation data
             ApiBytesInfo_t info = getBytesData();
-            LOG_INFO("WRI-DIRE |  dir: %-75s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", option.dirname, gWriteDir,
+            LOG_INFO("WRI-DIRE |  dir: %-100s | dir: %-14s | %-8s | Wr %9.2f %s | Re %9.2f %s |", option.dirname, gWriteDir,
                 (status == SERVER_API_SUCCESS) ? "SUCCEDED" : "FAILED", BYTES(info.bytesW), BYTES(info.bytesR));
             break;
         }

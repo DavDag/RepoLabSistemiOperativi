@@ -54,13 +54,13 @@ typedef enum {
  *   '/root/directory_1/directory_2/testfile.ext'
  */
 typedef struct {
-    int len;      // Filename's length
+    size_t len;   // Filename's length
     MsgPtr_t abs; // Absolute name str
 } ResourcePath_t;
 
 typedef struct {
     ResourcePath_t filename; // Filename
-    int contentLen;          // Length of content
+    size_t contentLen;       // Length of content
     MsgPtr_t content;        // Content
 } MsgFile_t;
 
@@ -120,7 +120,7 @@ typedef struct {
  * \retval  0: on EOF (connection closed)
  * \retval >0: on success
  */
-int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg);
+size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg);
 
 /**
  * TODO
@@ -133,7 +133,7 @@ int readMessage(long socketfd, char** buf, int* size, SockMessage_t* msg);
  * \retval  -1: on error (errno set)
  * \retval >=0: on success
  */
-int writeMessage(long socketfd, char** buf, int* size, SockMessage_t* msg);
+size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg);
 
 /*
  * Correctly handle messages content deallocation.
