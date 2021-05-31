@@ -451,6 +451,8 @@ int waitServerResponse(const char* dirname) {
 
         case MSG_RESP_WITH_FILES:
         {
+            if (handleServerStatus(msg.response.status) == SERVER_API_FAILURE)
+                return SERVER_API_FAILURE;
             LOG_VERB("Resp status: %d", msg.response.status);
             LOG_VERB("Resp num files: %d", msg.response.numFiles);
             for (int i = 0; i < msg.response.numFiles; ++i) {

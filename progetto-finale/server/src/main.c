@@ -11,7 +11,11 @@ int main(int argc, char** argv) {
     gettimeofday(&t, NULL);
     srand(t.tv_usec * t.tv_sec);
     
+#ifdef FORCE_LOG_VERBOSE_S
+    set_log_level(LOG_LEVEL_VERBOSE);
+#else
     set_log_level(LOG_LEVEL_INFO);
+#endif
     
     // Configs file must be the first parameter
     const char* configsFile = (argc > 1) ? argv[1] : DEFAULT_CONFIG_FILE;

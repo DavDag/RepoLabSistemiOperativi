@@ -10,8 +10,12 @@ int main(int argc, char** argv) {
     struct timeval t;
     gettimeofday(&t, NULL);
     srand(t.tv_usec * t.tv_sec);
-
+    
+#ifdef FORCE_LOG_VERBOSE_C
+    set_log_level(LOG_LEVEL_VERBOSE);
+#else
     set_log_level(LOG_LEVEL_INFO);
+#endif
 
     // Do-While just for better error handling
     do {

@@ -99,7 +99,7 @@ clientTerminated() {
 
 # Stop after 30 seconds
 cid=0
-end=$(( SECONDS + 29 ))
+end=$(( SECONDS + 30 ))
 while [ $SECONDS -lt $end ]
 do
     # Count child processes
@@ -110,7 +110,7 @@ do
         spawnClient $cid
         cid=$(( $cid + 1 ))
     fi
-    # echo $num_childrens
+    #echo $num_childrens
 done
 
 for i in ${!bigdirfiles[@]}

@@ -125,7 +125,8 @@ int initializeServer(ServerConfig_t configs) {
     gWorkQueue = createQueue(RING_BUFFER_SIZE);
     gLockQueue = createQueue(LOCK_QUEUE_SIZE);
 
-    // Initialize FS
+    // Initialize Sessions & FS
+    initSessionSystem();
     initializeFileSystem(gConfigs.fsConfigs, gLockQueue, &gLockCond, &gLockMutex);
 
     // Pipe MainThread -> SelectThread
@@ -157,7 +158,9 @@ int runServer() {
     while (!gSigIntReceived && !gSigQuitReceived && !gSigHupReceived) {
         // Accept new client
         if ((newConnFd = accept(gSocketFd, NULL, 0)) < 0) {
-            if (errno != EINTR) LOG_ERRNO("[#MN] Unable to accept client");
+            if (errno != EINTR) {
+                LOG_ERRNO("[#MN] Unable to accept client");
+            }
             continue;
         }
 
@@ -234,7 +237,8 @@ int terminateSever() {
     free(gLockQueue->data);
     free(gLockQueue);
 
-    // Close FS & Log execution summary
+    // Close Sessions & FS (Log execution summary)
+    terminateSessionSystem();
     terminateFileSystem();
 
     // Close log file
@@ -345,6 +349,14 @@ int numClientConnected() {
 }
 
 void* workerThreadFun(void* args) {
+    // Mask signals
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGQUIT);
+    sigaddset(&set, SIGHUP);
+    pthread_sigmask(SIG_SETMASK, &set, NULL);
+
     // vars
     char* _inn_buffer   = NULL;
     int innerBufferSize = 0;
@@ -352,14 +364,14 @@ void* workerThreadFun(void* args) {
     int res = 0;
 
     // Stop working when SIGINT / SIGQUIT received and on SIGHUP when there're no more clients connected
-    while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || (numClientConnected() > 0))) {
+    while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && (numClientConnected() == 0))) {
         // Vars
         CircQueueItemPtr_t item = NULL;
         long long bytesRead = 0, bytesWrote = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gWorkMutex);
-        while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || (numClientConnected() > 0)) && (tryPop(gWorkQueue, &item) == 0)) {
+        while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && (numClientConnected() == 0)) && (tryPop(gWorkQueue, &item) == 0)) {
             LOG_VERB("[#%.2d] waiting for work...", threadID);
             // Wait for cond
             if ((res = pthread_cond_wait(&gWorkCond, &gWorkMutex)) != 0) {
@@ -371,7 +383,7 @@ void* workerThreadFun(void* args) {
 
         // Check if exited for signal
         if (item == NULL) {
-            LOG_VERB("[#%.2d] Queue empty", threadID);
+            LOG_VERB("[#%.2d] Queue empty %d %d %d %d", threadID, numClientConnected(), gSigIntReceived, gSigQuitReceived, gSigHupReceived);
             continue;
         }
         struct timespec begin, end;
@@ -384,10 +396,7 @@ void* workerThreadFun(void* args) {
         SockMessage_t requestMsg;
         if ((bytesRead = readMessage(client, &_inn_buffer, &innerBufferSize, &requestMsg)) < 0) {
             LOG_ERRNO("[#SE] Error reading message");
-            // Close socket
-            if (close(client) < 0)
-                LOG_ERRNO("[#SE] Error closing socket #%02d", client);
-            // Readd descriptor to set
+            // Send message to select pipe to notify client disconnected
             int messageToSend[2] = { REM_CONNECTION, client };
             writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int)); 
             continue;
@@ -402,7 +411,7 @@ void* workerThreadFun(void* args) {
                 destroySession(client);
             }
             LOG_VERB("[#SE] Client on FD#%02d disconnected !", client);
-            // Readd descriptor to set
+            // Send message to select pipe to notify client disconnected
             int messageToSend[2] = { REM_CONNECTION, client };
             writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int)); 
             continue;
@@ -412,7 +421,7 @@ void* workerThreadFun(void* args) {
 
         // Handle message
         SockMessage_t responseMsg = handleWork(threadID, client, requestMsg);
-        if (requestMsg.type == MSG_REQ_LOCK_FILE && responseMsg.type == MSG_NONE) {
+        if ((requestMsg.type == MSG_REQ_LOCK_FILE || (requestMsg.type == MSG_REQ_OPEN_FILE && (requestMsg.request.flags == FLAG_LOCK))) && responseMsg.type == MSG_NONE) {
             // Unable to lock.
             // Already pushed into side queue for future handling
         } else {
@@ -432,11 +441,20 @@ void* workerThreadFun(void* args) {
         freeMessageContent(&requestMsg , 1);
         freeMessageContent(&responseMsg, 1);
     }
+
     free(_inn_buffer);
     return NULL;
 }
 
 void* selectThreadFun(void* args) {
+    // Mask signals
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGQUIT);
+    sigaddset(&set, SIGHUP);
+    pthread_sigmask(SIG_SETMASK, &set, NULL);
+
     // Run until signal is received
     fd_set fds_cpy;
     int res = -1;
@@ -465,7 +483,9 @@ void* selectThreadFun(void* args) {
             }
             else {
                 // Check for request to exit
-                if (message == EXIT_REQUESTED) break;
+                if (message == EXIT_REQUESTED) {
+                    break;
+                }
 
                 // Otherwise
                 int value;
@@ -525,7 +545,9 @@ void* selectThreadFun(void* args) {
                 // Try push message into queue
                 if (tryPush(gWorkQueue, (void*) (intptr_t) fd) == 0) {
                     LOG_WARN("[#SE] Msg queue is full. Consider upgrading its capacity. (curr = %d)", gWorkQueue->capacity);
-                    // TODO: Il client ?
+                    // Disconnect client !
+                    if (close(fd) < 0)
+                        LOG_ERRNO("[#SE] Error closing socket #%02d", fd);
                 }
 
                 // Signal item added to queue
@@ -540,10 +562,19 @@ void* selectThreadFun(void* args) {
         }
         gMaxFd = newMaxFD;
     }
+
     return NULL;
 }
 
 void* lockThreadFun(void* args) {
+    // Mask signals
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGQUIT);
+    sigaddset(&set, SIGHUP);
+    pthread_sigmask(SIG_SETMASK, &set, NULL);
+
     // vars
     int innerBufferSize = 1024;
     char* _inn_buff = (char*) mem_malloc(innerBufferSize * sizeof(char)); // Can be fixed because responses are always the same
@@ -640,7 +671,7 @@ int spawnSideThreads() {
 SockMessage_t handleWork(int workingThreadID, int client, SockMessage_t msg) {
     // Empty response
     SockMessage_t response = {
-        .uid  = UUID_new(),
+        .uid  = msg.uid,
         .type = MSG_RESP_SIMPLE,
         .response = {
             .status = RESP_STATUS_OK
@@ -837,7 +868,7 @@ SockMessage_t handleWork(int workingThreadID, int client, SockMessage_t msg) {
             } else {
                 // Check file was opened
                 if ((res = hasOpenedFile(session, file)) != SESSION_FILE_ALREADY_OPENED) {
-                    LOG_ERRO("[#%.2d] Error closing file '%s' for client #%.2d", workingThreadID, file.name, client);
+                    LOG_ERRO("[#%.2d] Error %d, file '%s' was not open for client #%.2d", workingThreadID, res, file.name, client);
                     handleError(res, &response);
                     break;
                 }

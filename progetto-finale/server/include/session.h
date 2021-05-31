@@ -22,12 +22,27 @@ typedef struct { const char* name; int len; } SessionFile_t;
 typedef time_t timestamp_t;
 
 typedef struct {
+    pthread_mutex_t mutex;                          // Ensure only 1 worker at time
     int isValid;                                    // Is session valid ?
     timestamp_t creation_time, last_operation_time; // Timestamp for creation date and last operation
     int numFileOpened;                              // Num files opened
     HashValue filenames[MAX_CLIENT_OPENED_FILES];   // Filename         of file i
     int flags[MAX_CLIENT_OPENED_FILES];             // Flags at opening of file i
 } ClientSession_t;
+
+/**
+ * Initialize session system
+ * 
+ * \retval  0
+ */
+void initSessionSystem();
+
+/**
+ * Terminate session system
+ * 
+ * \retval  0
+ */
+void terminateSessionSystem();
 
 /**
  * Create new session for client.

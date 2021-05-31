@@ -160,6 +160,10 @@ conv_bytes() {
     then
         unit="MB"
         byt=$(echo "$1/1024/1024" | bc -l)
+    elif [[ $1 -lt 1024*1024*1024*1024 ]]
+    then
+        unit="GB"
+        byt=$(echo "$1/1024/1024/1024" | bc -l)
     fi
     echo "$(printf "%7.2f $unit" $byt)"
 }
@@ -168,6 +172,8 @@ echo "+--------------------------------------+"
 echo "| Avg bytes (READ-FILE)  => $(conv_bytes $AVG_RF) |"
 echo "| Avg bytes (READ-N)     => $(conv_bytes $AVG_RN) |"
 echo "| Avg bytes (WRITE-FILE) => $(conv_bytes $AVG_WF) |"
+echo "| Total bytes (READ)     => $(conv_bytes $(( $TOTAL_RNSUM + $TOTAL_RFSUM )) ) |"
+echo "| Total bytes (WRITTEN)  => $(conv_bytes $TOTAL_WSUM) |"
 echo "+--------------------------------------+"
 echo "| Count (READ-FILE)      => $(printf "%10d" $TOTAL_RFCOUNT) |"
 echo "| Count (READ-N)         => $(printf "%10d" $TOTAL_RNCOUNT) |"
