@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 #include <unistd.h>
-#include <threads.h>
 #include <pthread.h>
 
 #include <logger.h>

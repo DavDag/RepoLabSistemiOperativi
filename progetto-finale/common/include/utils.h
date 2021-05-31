@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <threads.h>
 
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)

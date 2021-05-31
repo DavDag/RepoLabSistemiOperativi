@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <threads.h>
 
 /** 
  * " The probability to find a duplicate within 103 trillion version-4 UUIDs is one in a billion. "
@@ -53,7 +52,7 @@ static inline UUID_t UUID_new() {
 }
 
 /**
- * THREAD-SAFE.
+ * NON THREAD-SAFE.
  * 
  * Returns a ptr to a static zero-terminated-string buffer that contains the canonical
  * textual representation of the UUID.
@@ -61,10 +60,7 @@ static inline UUID_t UUID_new() {
  * xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
  */
 static inline const char* UUID_to_String(UUID_t u) {
-    // One per thread
-    // source:
-    //   https://en.cppreference.com/w/c/thread/thread_local
-    static thread_local char _inn_buffer[37];
+    static char _inn_buffer[37];
 
     // 00000000-1111-1111-2222-222233333333
     snprintf(_inn_buffer, 37, "%08X-%04X-%04X-%04X-%04X%08X",
