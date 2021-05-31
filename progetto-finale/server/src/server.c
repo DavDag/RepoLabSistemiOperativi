@@ -27,6 +27,7 @@
 #define EXIT_REQUESTED 1000 // Main => Select   : request to stop reading
 #define NEW_CONNECTION 1001 // Main => Select   : client connected
 #define SET_CONNECTION 1002 // Worker => Select : readd client
+#define REM_CONNECTION 1003 // Worker => Select : client disconnected
 
 #define MAX_FILE_SIZE 32
 
@@ -178,7 +179,7 @@ int runServer() {
 int terminateSever() {
     LOG_VERB("[#MN] Terminating server ...");
 
-    // Broadcast signal
+    // Send signal
     lock_mutex(&gWorkMutex);
     notify_all(&gWorkCond);
     unlock_mutex(&gWorkMutex);
@@ -335,6 +336,14 @@ void cleanup() {
     LOG_VERB("[#MN] Cleanup terminated");
 }
 
+int numClientConnected() {
+    int res = 0;
+    lock_mutex(&gNumClientMutex);
+    res = gNumClientConnected;
+    unlock_mutex(&gNumClientMutex);
+    return res;
+}
+
 void* workerThreadFun(void* args) {
     // vars
     char* _inn_buffer   = NULL;
@@ -343,14 +352,14 @@ void* workerThreadFun(void* args) {
     int res = 0;
 
     // Stop working when SIGINT / SIGQUIT received and on SIGHUP when there're no more clients connected
-    while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || gNumClientConnected > 0)) {
+    while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || (numClientConnected() > 0))) {
         // Vars
         CircQueueItemPtr_t item = NULL;
         long long bytesRead = 0, bytesWrote = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gWorkMutex);
-        while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || gNumClientConnected > 0) && (tryPop(gWorkQueue, &item) == 0)) {
+        while (!gSigIntReceived && !gSigQuitReceived && (!gSigHupReceived || (numClientConnected() > 0)) && (tryPop(gWorkQueue, &item) == 0)) {
             LOG_VERB("[#%.2d] waiting for work...", threadID);
             // Wait for cond
             if ((res = pthread_cond_wait(&gWorkCond, &gWorkMutex)) != 0) {
@@ -378,11 +387,12 @@ void* workerThreadFun(void* args) {
             // Close socket
             if (close(client) < 0)
                 LOG_ERRNO("[#SE] Error closing socket #%02d", client);
+            // Readd descriptor to set
+            int messageToSend[2] = { REM_CONNECTION, client };
+            writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int)); 
             continue;
         }
         if (bytesRead == 0) {
-            // Client disconnected !
-            if (close(client) < 0) LOG_ERRNO("[#SE] Error closing socket #%02d", client);
             // Handle disconnection
             ClientSession_t* session = NULL;
             if (getRawSession(client, &session) == 0) {
@@ -392,10 +402,9 @@ void* workerThreadFun(void* args) {
                 destroySession(client);
             }
             LOG_VERB("[#SE] Client on FD#%02d disconnected !", client);
-            // Decrement counter
-            lock_mutex(&gNumClientMutex);
-            --gNumClientConnected;
-            unlock_mutex(&gNumClientMutex);
+            // Readd descriptor to set
+            int messageToSend[2] = { REM_CONNECTION, client };
+            writeN(mainToSelectPipe[PIPE_WRITE_END], (char*) &messageToSend, 2 * sizeof(int)); 
             continue;
         }
         // Message received !
@@ -474,6 +483,20 @@ void* selectThreadFun(void* args) {
                         lock_mutex(&gNumClientMutex);
                         ++gNumClientConnected;
                         unlock_mutex(&gNumClientMutex);
+                        break;
+                    
+                    case REM_CONNECTION:
+                        // Client disconnected !
+                        if (close(value) < 0)
+                            LOG_ERRNO("[#SE] Error closing socket #%02d", value);
+                        // Decrement counter
+                        lock_mutex(&gNumClientMutex);
+                        --gNumClientConnected;
+                        unlock_mutex(&gNumClientMutex);
+                        // Send signal to another worker
+                        lock_mutex(&gWorkMutex);
+                        notify_all(&gWorkCond);
+                        unlock_mutex(&gWorkMutex);
                         break;
                     
                     case SET_CONNECTION:

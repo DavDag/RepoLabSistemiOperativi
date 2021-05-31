@@ -1,9 +1,16 @@
+#include <sys/time.h>
+
 #include <common.h>
+
 #include "server.h"
 #include "loader.h"
 
 int main(int argc, char** argv) {
-    srand(time(NULL));
+    // Seme random
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    srand(t.tv_usec * t.tv_sec);
+    
     set_log_level(LOG_LEVEL_INFO);
     
     // Configs file must be the first parameter

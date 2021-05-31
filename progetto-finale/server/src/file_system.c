@@ -152,6 +152,7 @@ int fs_insert(int client, FSFile_t file, int aquireLock, FSFile_t** outFiles, in
         updateCacheSize(&file, NULL, outFiles, outFilesCount);
     } else {
         // Hash collision
+        LOG_WARN("[#FS] File exists or Hash collision");
         res = FS_FILE_ALREADY_EXISTS;
     }
 
@@ -221,7 +222,7 @@ int fs_remove(int client, FSFile_t file) {
             }
 
             // Update cache
-            updateCacheSize(NULL, &file, NULL, NULL);
+            updateCacheSize(NULL, &entry->file, NULL, NULL);
 
             // Release memory
             freeCacheEntry(entry);
@@ -696,8 +697,8 @@ void moveToTop(FSCacheEntry_t* entry) {
 
 void updateCacheSize(FSFile_t* newFile, FSFile_t* oldFile, FSFile_t** ejectedFiles, int* ejectedFilesCount) {
     // Update current size (MB)
-    if (newFile != NULL) gCache.bytesUsed += newFile->contentLen + newFile->nameLen;
-    if (oldFile != NULL) gCache.bytesUsed -= oldFile->contentLen + oldFile->nameLen;
+    if (newFile != NULL) gCache.bytesUsed += +(newFile->contentLen + newFile->nameLen);
+    if (oldFile != NULL) gCache.bytesUsed += -(oldFile->contentLen + oldFile->nameLen);
 
     // Update current size (Slot)
     if (newFile == NULL) gCache.slotUsed--;

@@ -3,7 +3,7 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-#define MAX_OPTIONS_COUNT 128
+#define MAX_OPTIONS_COUNT 512
 
 /**
  * Initialize global state.

@@ -13,7 +13,7 @@
 // #define DEBUG_LOG
 
 #define MAX_FILE_PATH_LEN 256
-#define BASE_HASHTABLE_SIZE 512*512
+#define BASE_HASHTABLE_SIZE 1024*1024
 
 /**
  * Read configs from file.

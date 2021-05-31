@@ -13,8 +13,12 @@ TOTAL_WSUM=0     # Total write file bytes
 TOTAL_WCOUNT=0   # Total write file op
 TOTAL_LCOUNT=0   # Total lock file op
 TOTAL_UCOUNT=0   # Total unlock file op
+TOTAL_RMCOUNT=0  # Total remove file op
 TOTAL_OLCOUNT=0  # Total open-lock file op
 TOTAL_CCOUNT=0   # Total close file op
+TOTAL_OFCOUNT=0  # Total open file op 
+TOTAL_OSCOUNT=0  # Total open session op 
+TOTAL_CSCOUNT=0  # Total close session op 
 TOTAL_LNCOUNT=0  # Total lock notification sent
 MAX_SIZE_BYTES=0 # Maximum size reached in bytes (file-system)
 MAX_SIZE_SLOT=0  # Maximum size reached in slot (file-system)
@@ -57,19 +61,32 @@ do
                     TOTAL_REQ_PTH[$thread]=$(( TOTAL_REQ_PTH[$thread] + 1))
                 fi
                 optype=${key:7:2}
-                if [[ $optype == "LF" ]]
-                then
-                    TOTAL_LCOUNT=$(( TOTAL_LCOUNT + 1 ))
-                elif [[ $optype == "UF" ]]
-                then
-                    TOTAL_UCOUNT=$(( TOTAL_UCOUNT + 1 ))
-                elif [[ $optype == "OL" ]]
-                then
-                    TOTAL_OLCOUNT=$(( TOTAL_OLCOUNT + 1 ))
-                elif [[ $optype == "CF" ]]
-                then
-                    TOTAL_CCOUNT=$(( TOTAL_CCOUNT + 1 ))
-                fi
+                case $optype in 
+                    LF)
+                        TOTAL_LCOUNT=$(( TOTAL_LCOUNT + 1 ))
+                        ;;
+                    UF)
+                        TOTAL_UCOUNT=$(( TOTAL_UCOUNT + 1 ))
+                        ;;
+                    RM)
+                        TOTAL_RMCOUNT=$(( TOTAL_RMCOUNT + 1 ))
+                        ;;
+                    OL)
+                        TOTAL_OLCOUNT=$(( TOTAL_OLCOUNT + 1 ))
+                        ;;
+                    OS)
+                        TOTAL_OSCOUNT=$(( TOTAL_OSCOUNT + 1 ))
+                        ;;
+                    O*)
+                        TOTAL_OFCOUNT=$(( TOTAL_OFCOUNT + 1 ))
+                        ;;
+                    CF)
+                        TOTAL_CCOUNT=$(( TOTAL_CCOUNT + 1 ))
+                        ;;
+                    CS)
+                        TOTAL_CSCOUNT=$(( TOTAL_CSCOUNT + 1 ))
+                        ;;
+                esac
                 ;;
             
             # Client id
@@ -157,8 +174,12 @@ echo "| Count (READ-N)         => $(printf "%10d" $TOTAL_RNCOUNT) |"
 echo "| Count (WRITE-FILE)     => $(printf "%10d" $TOTAL_WCOUNT) |"
 echo "| Count (LOCK-FILE)      => $(printf "%10d" $TOTAL_LCOUNT) |"
 echo "| Count (UNLOCK-FILE)    => $(printf "%10d" $TOTAL_UCOUNT) |"
+echo "| Count (REMOVE-FILE)    => $(printf "%10d" $TOTAL_RMCOUNT) |"
+echo "| Count (OPEN-FILE)      => $(printf "%10d" $TOTAL_OFCOUNT) |"
 echo "| Count (OPEN-LOCK-FILE) => $(printf "%10d" $TOTAL_OLCOUNT) |"
 echo "| Count (CLOSE-FILE)     => $(printf "%10d" $TOTAL_CCOUNT) |"
+echo "| Count (OPEN-SESSION)   => $(printf "%10d" $TOTAL_OSCOUNT) |"
+echo "| Count (CLOSE-SESSION)  => $(printf "%10d" $TOTAL_CSCOUNT) |"
 echo "| Count (LOCK-NOT)       => $(printf "%10d" $TOTAL_LNCOUNT) |"
 echo "+--------------------------------------+"
 echo "| Max FS size (Bytes)    => $(conv_bytes $MAX_SIZE_BYTES) |"

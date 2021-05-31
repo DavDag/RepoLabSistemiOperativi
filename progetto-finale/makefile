@@ -51,7 +51,7 @@ test2: resettest | addperm files
 
 test3: resettest | addperm files
 	@$(SERVER_EXE) ./configs/test3.txt & \
-	timeout 30 ./scripts/test3.sh $(CLIENT_EXE); \
+	./scripts/test3.sh $(CLIENT_EXE); \
 	kill -2 $$!; \
 	wait;
 
