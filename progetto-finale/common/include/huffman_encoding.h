@@ -3,6 +3,8 @@
 #ifndef HUFFMAN_ENCODING_H
 #define HUFFMAN_ENCODING_H
 
+// https://en.wikipedia.org/wiki/Huffman_coding
+
 #include <stdlib.h>
 
 // Result type of encoding / decoding
