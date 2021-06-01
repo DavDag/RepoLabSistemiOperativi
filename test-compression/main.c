@@ -4,21 +4,23 @@
 #include "huffman_encoding.c"
 
 void test(const char* name, const char* data, size_t size0) {
-    printf("%-24s: ", name);
+    fprintf(stderr, "%-24s: ", name);
 
     HuffCodingResult_t res1 = compress_data(data, size0);
     HuffCodingResult_t res2 = decompress_data(res1.data, res1.size);
 
-    printf("%9.7f ns | %9.7f ns : ", res1.time, res2.time);
+    fprintf(stderr, "%9.7f ns | %9.7f ns : ", res1.time, res2.time);
 
     if (res2.size == size0) {
         if (memcmp(res2.data, data, res2.size) == 0) {
-            printf("Success\n");
+            fprintf(stderr, "Success\n");
         } else {
-            printf("Failed, different content\n");
+            fprintf(stderr, "Failed, different content\n");
+            save_as_file("./out", name, res2.data, res2.size);
         }
     } else {
-        printf("Failed, different sizes %lu %lu\n", res2.size, size0);
+        fprintf(stderr, "Failed, different sizes %lu %lu\n", res2.size, size0);
+        save_as_file("./out", name, res2.data, res2.size);
     }
 
     free(res1.data);
@@ -33,11 +35,19 @@ void test_from_file(const char* filename) {
     char *string = calloc(fsize, sizeof(char));
     size_t read = fread(string, 1, fsize, f);
     fclose(f);
+    // fprintf(stderr, "\nOpening file %s... size %ld B / %ld B\n", filename, fsize, read);
     test(filename, string, read);
     free(string);
 }
 
 int main(int argc, char** argv) {
+    test_from_file("td/prova.cpp");
+    test_from_file("td/prova.txt");
+    test_from_file("td/prova.exe");
+    test_from_file("td/prova.pdf");
+    test_from_file("td/prova.zip");
+    test_from_file("td/prova.png");
+    /*
     test("text_short1", TEXT_SHORT1, strlen(TEXT_SHORT1));
     test("text_short2", TEXT_SHORT2, strlen(TEXT_SHORT2));
     test("text_short3", TEXT_SHORT3, strlen(TEXT_SHORT3));
@@ -54,5 +64,6 @@ int main(int argc, char** argv) {
         snprintf(buffer, 50, "testdir/test_%d.txt", i);
         test_from_file(buffer);
     }
+    */
     return 1;
 }

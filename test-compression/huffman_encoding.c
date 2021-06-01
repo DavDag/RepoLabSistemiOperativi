@@ -1,5 +1,7 @@
 #include "huffman_encoding.h"
 
+#include "utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,6 +100,11 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
             break;
         }
     }
+    // printf("===DICT===\n");
+    for (int i = 0; i < 256; ++i) {
+        // printf("%8d %3d\n", dictionary[i].freq, (unsigned char) dictionary[i].chr);
+    }
+    // printf("==========\n");
 
     // 5. Create trees
     const int treeSize = first0 * 2 - 1;
@@ -136,6 +143,12 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
         // 6.3 Save root
         treeRoot = tmpTreeIndexL;
     }
+
+    // printf("===TREE===\n");
+    for (int i = 0; i < treeSize; ++i) {
+        // printf("%3d [%3d]: %+8lld %+4d %+4d\n", i, (unsigned char) dictionary[i].chr, tree[i].val, tree[i].left, tree[i].right);
+    }
+    // printf("==========\n");
 
     // 7. Create encoding table
     HuffTableEntry_t table[256];
@@ -186,6 +199,22 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
         }
     }
 
+    /*
+    printf("===TABLE===\n");
+    printf("\n");
+    for (int i = 0; i < 256; ++i) {
+        printf("%3d => ", i);
+        for (int j = 0; j < table[i].size; ++j) {
+            const int byteInd  = j / 8;
+            const int bitInd   =  7 - (j % 8);
+            const int bitValue = CHECK_BIT(table[i].code[byteInd], bitInd);
+            printf("%c", (bitValue) ? '1' : '0');
+        }
+        printf("\n");
+    }
+    printf("===========\n");
+    */
+
     // 9. Estimate final compressed size
     size_t compressedSize = (1 + 1 + sizeof(int)) * 8 + (10 * first0 - 1);
     for (int i = 0; i < dataSize; ++i) {
@@ -200,7 +229,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
         clock_gettime(CLOCK_MONOTONIC, &end);
     
         // No, it is not.
-        result.data    = (BYTE*) calloc(dataSize + 1, sizeof(BYTE));
+        result.data    = (BYTE*) mem_calloc(dataSize + 1, sizeof(BYTE));
         result.data[0] = NOT_COMPRESSED_FLAG;
         memcpy(result.data + 1, data, dataSize * sizeof(BYTE));
         result.size    = dataSize + 1;
@@ -211,10 +240,12 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
 
     // 10. Create output buffer
     HuffBuffer_t out;
-    out.stream      = (BYTE*) calloc(compressedSize, sizeof(BYTE));
+    out.stream      = (BYTE*) mem_calloc(compressedSize, sizeof(BYTE));
     out.streamIndex = 0;
     out.byte        = 0x00;
     out.byteIndex   = 0;
+
+    // printf("originalSize: %ld\n", dataSize);
 
     // 11. Write header
     write_byte(&out, INT_TO_BYTE((COMPRESSED_FLAG | (padding))));
@@ -224,6 +255,9 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
     write_byte(&out, (dataSize >>  8));
     write_byte(&out, (dataSize >>  0));
 
+    // printf("\nHeader1: %d %d %ld\n", padding, first0, dataSize);
+
+    // printf("\n");
     // 12. Write tree
     {
         int queue[256], qSize = 0;
@@ -237,14 +271,18 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
 
             // 12.2 Check if current node is a leaf
             if (leftNodeInd == -1 && rightNodeInd == -1) {
-                BYTE charValue = dictionary[nodeInd].chr;
+                BYTE charValue = INT_TO_BYTE(dictionary[nodeInd].chr);
                 // 12.2.1 Write flag for leaf nodes
                 write_bit(&out, 1);
+                // printf("1");
                 // 12.2.2 Write ascii byte representing leaf node
                 write_byte(&out, charValue);
+                // static char tttt[16] = "0123456789ABCDEF";
+                // printf("%c%c", tttt[(charValue & 0xf0) >> 4], tttt[(charValue & 0x0f)]);
             } else {
                 // 12.3 Write flag for intermediate nodes
                 write_bit(&out, 0);
+                // printf("0");
                 // 12.4 Push right node into queue
                 if (rightNodeInd != -1) {
                     queue[qSize++] = rightNodeInd;
@@ -256,6 +294,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
             }
         }
     }
+    // printf("\n");
 
     // 13. Encode content
     for (int i = 0; i < dataSize; ++i) {
@@ -310,7 +349,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     BYTE header1 = read_byte(&in);
     if (!(header1 & (COMPRESSED_FLAG))) {
         // Data is uncompressed
-        result.data = (BYTE*) calloc(dataSize - 1, sizeof(BYTE));
+        result.data = (BYTE*) mem_calloc(dataSize - 1, sizeof(BYTE));
         memcpy(result.data, data + 1, (dataSize - 1) * sizeof(BYTE));
         result.size = dataSize - 1;
         result.time = 0.0;
@@ -320,11 +359,14 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     // 3. Data compressed. Finish reading header
     int padding      = header1 & (0x3F);
     int charCount    = read_byte(&in) + 1;
-    int originalSize =
+    if (charCount == 0) charCount = 256;
+    size_t originalSize =
         BYTE_TO_INT(read_byte(&in)) << 24 |
         BYTE_TO_INT(read_byte(&in)) << 16 |
         BYTE_TO_INT(read_byte(&in)) <<  8 |
         BYTE_TO_INT(read_byte(&in)) <<  0;
+
+    // printf("Header2: %d %d %ld\n", padding, charCount, originalSize);
 
     // 4. Create empty tree
     int treeSize = charCount * 2;
@@ -339,14 +381,14 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     {
         int fathers[256], qSize = 0;
         fathers[qSize] = 0;
-        for (int treeInd = 0; treeInd < (treeSize - 1); ++treeInd) {
+        for (int treeInd = 0; treeInd < treeSize - 1; ++treeInd) {
             // 5.0 vars
             const int bitValue = read_bit(&in);
 
             // 5.1 Check if current node is a leaf node
             if (bitValue) {
                 // 5.1.1 Fill tree data
-                tree[treeInd].val = read_byte(&in);
+                tree[treeInd].val = (unsigned char) read_byte(&in);
 
                 // 5.1.2 Update fathers
                 int updated = 0, tmpInd = treeInd;
@@ -370,13 +412,19 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
 
     HuffBuffer_t out;
     out.streamIndex = 0;
-    out.stream      = (BYTE*) calloc(originalSize, sizeof(BYTE));
+    out.stream      = (BYTE*) mem_calloc(originalSize, sizeof(BYTE));
     out.byteIndex   = 0;
     out.byte        = 0x00;
 
+    // printf("===TREE===\n");
+    for (int i = 0; i < treeSize; ++i) {
+        // printf("%3d [%3d]: %+8lld %+4d %+4d\n", i, (unsigned char) tree[i].val, tree[i].val, tree[i].left, tree[i].right);
+    }
+    // printf("==========\n");
+
     // 6. Decode data using tree
     {
-        int treeInd = 0, extraBits = (8 - in.byteIndex);
+        int treeInd = 0, extraBits = in.byteIndex;
         // 6.1 Extra bits to align at byte
         for (int i = 0; i < extraBits; ++i) {
             const int bitValue = read_bit(&in);
@@ -387,7 +435,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
             }
         }
         // 6.2 Start decoding aligned bytes
-        while (in.streamIndex < originalSize && (in.streamIndex < dataSize || (in.streamIndex == dataSize && padding == 0))) {
+        while (in.streamIndex < dataSize) {
             const int bitValue = read_bit(&in);
             treeInd = (bitValue) ? tree[treeInd].left : tree[treeInd].right;
             if (tree[treeInd].val != -1) {
@@ -396,6 +444,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
             }
         }
         // 6.3 Handle remaining padding
+        if (padding == 0) padding = 8;
         for (int i = 0; i < padding; ++i) {
             const int bitValue = read_bit(&in);
             treeInd = (bitValue) ? tree[treeInd].left : tree[treeInd].right;
