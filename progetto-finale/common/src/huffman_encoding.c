@@ -1,6 +1,7 @@
 #include "huffman_encoding.h"
 
 #include "utils.h"
+#include "logger.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +32,7 @@ static_assert(sizeof(BYTE) == 1, "Must be 1 byte");
 
 typedef struct {
     BYTE* stream;       // bytes stream
+    size_t streamSize;  // stream's size
     size_t streamIndex; // stream's index
     BYTE byte;          // tmp byte
     int byteIndex;      // tmp byte's index
@@ -38,6 +40,7 @@ typedef struct {
 
 typedef struct {
     const BYTE* stream; // bytes stream
+    size_t streamSize;  // stream's size
     size_t streamIndex; // stream's index
     BYTE byte;          // tmp byte
     int byteIndex;      // tmp byte's index
@@ -214,6 +217,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
     // 10. Create output buffer
     HuffBuffer_t out;
     out.stream      = (BYTE*) mem_calloc(compressedSize, sizeof(BYTE));
+    out.streamSize  = compressedSize;
     out.streamIndex = 0;
     out.byte        = 0x00;
     out.byteIndex   = 0;
@@ -225,6 +229,8 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
     write_byte(&out, (dataSize >> 16));
     write_byte(&out, (dataSize >>  8));
     write_byte(&out, (dataSize >>  0));
+
+    // LOG_INFO("C) Padding: %d, Charcount: %d, OrigSize: %ld, Compressed %ld", padding, first0, dataSize, compressedSize);
 
     // 12. Write tree
     {
@@ -281,7 +287,7 @@ HuffCodingResult_t compress_data(const BYTE* data, size_t dataSize) {
 
     // 14. Set values and return
     result.data = out.stream;
-    result.size = out.streamIndex;
+    result.size = out.streamSize;
     result.time = ELAPSED_TIME(begin, end);
     return result;
 }
@@ -304,6 +310,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     // 1. Create buffer
     HuffReadOnlyBuffer_t in;
     in.streamIndex = 1;
+    in.streamSize  = dataSize;
     in.stream      = data;
     in.byteIndex   = 0;
     in.byte        = data[0];
@@ -321,16 +328,20 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
 
     // 3. Data compressed. Finish reading header
     int padding      = header1 & (0x3F);
-    int charCount    = read_byte(&in) + 1;
-    int originalSize =
+    int charCount    = ((unsigned char) read_byte(&in)) + 1;
+    if (charCount == 0) charCount = 256;
+    size_t originalSize =
         BYTE_TO_INT(read_byte(&in)) << 24 |
         BYTE_TO_INT(read_byte(&in)) << 16 |
         BYTE_TO_INT(read_byte(&in)) <<  8 |
         BYTE_TO_INT(read_byte(&in)) <<  0;
 
+    // LOG_INFO("D) Padding: %d, Charcount: %d, OrigSize: %ld, Decompressed %ld", padding, charCount, dataSize, originalSize);
+
     // 4. Create empty tree
     int treeSize = charCount * 2;
     HuffTreeEntry_t tree[treeSize];
+    // HuffTreeEntry_t* tree = (HuffTreeEntry_t*) mem_malloc(treeSize * sizeof(HuffTreeEntry_t));
     for (int i = 0; i < treeSize; ++i) {
         tree[i].val   = -1;
         tree[i].left  = -1;
@@ -348,7 +359,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
             // 5.1 Check if current node is a leaf node
             if (bitValue) {
                 // 5.1.1 Fill tree data
-                tree[treeInd].val = read_byte(&in);
+                tree[treeInd].val = (unsigned char) read_byte(&in);
 
                 // 5.1.2 Update fathers
                 int updated = 0, tmpInd = treeInd;
@@ -371,14 +382,19 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     }
 
     HuffBuffer_t out;
-    out.streamIndex = 0;
     out.stream      = (BYTE*) mem_calloc(originalSize, sizeof(BYTE));
+    out.streamSize  = originalSize;
+    out.streamIndex = 0;
     out.byteIndex   = 0;
     out.byte        = 0x00;
 
+    int extraBits = (8 - in.byteIndex);
+    // LOG_WARN("Extra bits %d", extraBits);
+
     // 6. Decode data using tree
     {
-        int treeInd = 0, extraBits = (8 - in.byteIndex);
+        int treeInd = 0;
+        // LOG_WARN("1) In.streamIndex %d In.bitIndex %d", in.streamIndex, in.byteIndex);
         // 6.1 Extra bits to align at byte
         for (int i = 0; i < extraBits; ++i) {
             const int bitValue = read_bit(&in);
@@ -388,8 +404,9 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
                 treeInd = 0;
             }
         }
+        // LOG_WARN("2) In.streamIndex %d In.bitIndex %d", in.streamIndex, in.byteIndex);
         // 6.2 Start decoding aligned bytes
-        while (in.streamIndex < originalSize && (in.streamIndex < dataSize || (in.streamIndex == dataSize && padding == 0))) {
+        while (in.streamIndex < dataSize || (in.streamIndex <= dataSize && padding == 0)) {
             const int bitValue = read_bit(&in);
             treeInd = (bitValue) ? tree[treeInd].left : tree[treeInd].right;
             if (tree[treeInd].val != -1) {
@@ -398,6 +415,7 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
             }
         }
         // 6.3 Handle remaining padding
+        // LOG_WARN("3) In.streamIndex %d In.bitIndex %d", in.streamIndex, in.byteIndex);
         for (int i = 0; i < padding; ++i) {
             const int bitValue = read_bit(&in);
             treeInd = (bitValue) ? tree[treeInd].left : tree[treeInd].right;
@@ -411,9 +429,11 @@ HuffCodingResult_t decompress_data(const BYTE* data, size_t dataSize) {
     // TIMER END
     clock_gettime(CLOCK_MONOTONIC, &end);
 
+    // free(tree);
+
     // 14. Set values and return
     result.data = out.stream;
-    result.size = out.streamIndex;
+    result.size = out.streamSize;
     result.time = ELAPSED_TIME(begin, end);
     return result;
 }
@@ -433,7 +453,10 @@ int read_bit(HuffReadOnlyBuffer_t* buffer) {
     ++buffer->byteIndex;
     if (buffer->byteIndex == 8) {
         buffer->byteIndex = 0;
-        buffer->byte      = buffer->stream[buffer->streamIndex++];
+        if (buffer->streamSize > buffer->streamIndex) {
+            buffer->byte = buffer->stream[buffer->streamIndex];
+        }
+        buffer->streamIndex++;
     }
     return bitValue;
 }
@@ -450,9 +473,12 @@ void write_bit(HuffBuffer_t* buffer, int bitValue) {
     buffer->byte |= bitValue << (7 - buffer->byteIndex);
     ++(buffer->byteIndex);
     if (buffer->byteIndex == 8) {
-        buffer->stream[(buffer->streamIndex)++] = buffer->byte;
+        if (buffer->streamSize > buffer->streamIndex) {
+            buffer->stream[buffer->streamIndex] = buffer->byte;
+        }
         buffer->byte                            = 0x00;
         buffer->byteIndex                       = 0;
+        buffer->streamIndex++;
     }
 }
 

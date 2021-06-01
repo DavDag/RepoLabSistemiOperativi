@@ -62,7 +62,7 @@ SockMessage_t handleWork(int, int, SockMessage_t);
 void handleError(int, SockMessage_t*);
 FSFile_t copyRequestIntoFile(SockMessage_t);
 FSFile_t deepCopyRequestIntoFile(SockMessage_t);
-void log_into_file(SockMessage_t*, RespStatus_t, long long, long long, long long, int, int);
+void log_into_file(SockMessage_t*, RespStatus_t, long long, size_t, size_t, int, int);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -1066,12 +1066,13 @@ FSFile_t copyRequestIntoFile(SockMessage_t msg) {
 
 FSFile_t deepCopyRequestIntoFile(SockMessage_t msg) {
     // Copy name
-    int nLen = msg.request.file.filename.len;
+    size_t nLen = msg.request.file.filename.len;
     char* filename = (char*) mem_malloc(nLen * sizeof(char));
     memcpy(filename, msg.request.file.filename.abs.ptr, nLen * sizeof(char));
     
     // Copy content (if any)
-    int cLen = msg.request.file.contentLen;
+    size_t cLen = msg.request.file.contentLen;
+    // LOG_WARN("%64s => nLen %10ld cLen %10ld", filename, nLen, cLen);
     char* content  = (cLen) ? (char*) mem_malloc(cLen * sizeof(char)) : NULL;
     if (cLen) memcpy(content, msg.request.file.content.ptr, cLen * sizeof(char));
 
@@ -1085,7 +1086,7 @@ FSFile_t deepCopyRequestIntoFile(SockMessage_t msg) {
     return fs_file;
 }
 
-void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, long long bytesRead, long long bytesWrote, int workingThreadID, int client) {
+void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, size_t bytesRead, size_t bytesWrote, int workingThreadID, int client) {
     SockMessageType_t type = msg->type;
     if (type == MSG_REQ_OPEN_FILE) {
         type = 50 | msg->request.flags;
@@ -1127,12 +1128,12 @@ void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, long
     lock_mutex(&gLogMutex);
     if (workingThreadID == LOCK_THREAD_ID) {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n",
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12ld | W:%12ld | FS-B:%12ld | FS-S:%4d | FS-M:%4d |\n",
             UUID_to_String(msg->uid), timeInMsFromBegin, msec, opTable[type], client, connectedClientCount, bytesRead,
             bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     } else {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12lld | W:%12lld | FS-B:%12lld | FS-S:%4d | FS-M:%4d |\n", 
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12ld | W:%12ld | FS-B:%12ld | FS-S:%4d | FS-M:%4d |\n", 
             UUID_to_String(msg->uid),timeInMsFromBegin, msec, workingThreadID, opTable[type], client, connectedClientCount, bytesRead,
             bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     }

@@ -48,7 +48,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
         .uid = UUID_new(),
         .type = MSG_REQ_OPEN_SESSION
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -66,7 +66,7 @@ int closeConnection(const char* sockname) {
         .uid = UUID_new(),
         .type = MSG_REQ_CLOSE_SESSION
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -98,7 +98,7 @@ int openFile(const char* pathname, int flags) {
 }
 
 int openFileWithDir(const char* pathname, int flags, const char* dirname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_OPEN_FILE' message
     SockMessage_t msg = {
@@ -116,7 +116,7 @@ int openFileWithDir(const char* pathname, int flags, const char* dirname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -129,7 +129,7 @@ int openFileWithDir(const char* pathname, int flags, const char* dirname) {
 }
 
 int readFile(const char* pathname, void** buf, size_t* size) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
     
     // 1. Send 'MSG_REQ_READ_FILE' message
     SockMessage_t msg = {
@@ -147,7 +147,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -171,7 +171,7 @@ int readFile(const char* pathname, void** buf, size_t* size) {
         // Read file
         if (msg.response.numFiles == 1) {
             // Process data
-            int len = msg.response.files[0].contentLen;
+            size_t len = msg.response.files[0].contentLen;
             char* buffer = (char*) mem_malloc(len * sizeof(char));
             memcpy(buffer, msg.response.files[0].content.ptr, len * sizeof(char));
             // Pass values
@@ -205,7 +205,7 @@ int readNFiles(int N, const char* dirname) {
             .flags = N
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -218,11 +218,11 @@ int readNFiles(int N, const char* dirname) {
 }
 
 int writeFile(const char* pathname, const char* dirname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Read file content
     char* content  = NULL;
-    int contentLen = 0;
+    size_t contentLen = 0;
     if (read_entire_file(pathname, &content, &contentLen) < 0)
         return SERVER_API_FAILURE;
     
@@ -242,7 +242,7 @@ int writeFile(const char* pathname, const char* dirname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         free(content);
         freeMessageContent(&msg, 0);
@@ -257,7 +257,7 @@ int writeFile(const char* pathname, const char* dirname) {
 }
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_WRITE_FILE' message
     SockMessage_t msg = {
@@ -275,7 +275,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         free(buf);
         freeMessageContent(&msg, 0);
@@ -290,7 +290,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 }
 
 int lockFile(const char* pathname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_LOCK_FILE' message
     SockMessage_t msg = {
@@ -308,7 +308,7 @@ int lockFile(const char* pathname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -321,7 +321,7 @@ int lockFile(const char* pathname) {
 }
 
 int unlockFile(const char* pathname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_UNLOCK_FILE' message
     SockMessage_t msg = {
@@ -339,7 +339,7 @@ int unlockFile(const char* pathname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -352,7 +352,7 @@ int unlockFile(const char* pathname) {
 }
 
 int closeFile(const char* pathname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_CLOSE_FILE' message
     SockMessage_t msg = {
@@ -370,7 +370,7 @@ int closeFile(const char* pathname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -383,7 +383,7 @@ int closeFile(const char* pathname) {
 }
 
 int removeFile(const char* pathname) {
-    int filenameLen = strlen(pathname) + 1;
+    size_t filenameLen = strlen(pathname) + 1;
 
     // 1. Send 'MSG_REQ_REMOVE_FILE' message
     SockMessage_t msg = {
@@ -401,7 +401,7 @@ int removeFile(const char* pathname) {
             }
         }
     };
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = writeMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         freeMessageContent(&msg, 0);
         return SERVER_API_FAILURE;
@@ -416,7 +416,7 @@ int removeFile(const char* pathname) {
 int waitServerResponse(const char* dirname) {
     // Wait message from server
     SockMessage_t msg;
-    int bytes = 0;
+    size_t bytes = 0;
     if ((bytes = readMessage(gSocketFd, &gBuffer, &gBufferSize, &msg)) <= 0) {
         errno = ECANCELED;
         return SERVER_API_FAILURE;
@@ -461,7 +461,7 @@ int waitServerResponse(const char* dirname) {
             }
             if (dirname) {
                 for (int i = 0; i < msg.response.numFiles; ++i) {
-                    int contentLen        = msg.response.files[i].contentLen;
+                    size_t contentLen     = msg.response.files[i].contentLen;
                     const char* content   = msg.response.files[i].content.ptr;
                     const char* pathname  = msg.response.files[i].filename.abs.ptr;
                     LOG_VERB("Saving file %s into directory %s ...", pathname, dirname);

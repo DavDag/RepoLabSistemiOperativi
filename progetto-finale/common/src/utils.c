@@ -18,7 +18,7 @@ int parse_positive_integer(const char* str) {
     return val;
 }
 
-int read_entire_file(const char* file, char** buffer, int* len) {
+int read_entire_file(const char* file, char** buffer, size_t* len) {
     // vars
     int res        = 0;
     int contentLen = 0;
@@ -42,7 +42,7 @@ int read_entire_file(const char* file, char** buffer, int* len) {
     return 0;
 }
 
-int save_as_file(const char* dirname, const char* filename, const char* content, int contentSize) {
+int save_as_file(const char* dirname, const char* filename, const char* content, size_t contentSize) {
     // Calc path
     static char mkdirCmdPrefix[] = "mkdir -p ";
     static char mkdirCmd[4096];

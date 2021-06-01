@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <pthread.h>
 
+// Just for better logging
+#define BYTES(b) ((b>1024*1024)?((float)b)/1024/1024:(b>1024)?((float)b)/1024:b),((b>1024*1024)?"MB":(b>1024)?"KB":" B")
+
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 
@@ -28,7 +31,7 @@ int parse_positive_integer(const char* str);
  * \retval  0: on success
  * \retval -1: on error. (errno set)
  */
-int read_entire_file(const char* file, char** buffer, int* len);
+int read_entire_file(const char* file, char** buffer, size_t* len);
 
 /**
  * Save buffer as file inside directory dir (creating it recursively).
@@ -41,7 +44,7 @@ int read_entire_file(const char* file, char** buffer, int* len);
  * \retval  0: on success
  * \retval -1: on error. (errno set)
  */
-int save_as_file(const char* dirname, const char* filename, const char* content, int contentSize);
+int save_as_file(const char* dirname, const char* filename, const char* content, size_t contentSize);
 
 /*
  * Always returns a valid ptr or terminate the process

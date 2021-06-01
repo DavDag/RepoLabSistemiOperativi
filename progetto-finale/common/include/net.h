@@ -16,7 +16,7 @@
  * To be able to send ptr's via socket, they needs to be converted
  * to offsets relative to message's begin.
  */
-typedef union { int i; const char* ptr; } MsgPtr_t;
+typedef union { size_t i; const char* ptr; } MsgPtr_t;
 
 // Message's type
 typedef enum {

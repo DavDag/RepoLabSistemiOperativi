@@ -4,7 +4,6 @@ export LC_NUMERIC="en_US.UTF-8"
 
 # Setup
 LOG_FILE=$1
-RUN_PYTH="-d"
 
 # Vars
 TOTAL_RFSUM=0    # Total read file bytes 
@@ -200,9 +199,3 @@ do
     echo "| Req handled by t #$(printf "%.3d" $i)  => $(printf "%10d" ${TOTAL_REQ_PTH[$i]}) |"
 done
 echo "+--------------------------------------+"
-
-# Check if needs to display graphs
-if [ "$2" = $RUN_PYTH ]
-then
-    echo "Displaying graphs..."
-fi

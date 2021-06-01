@@ -2,6 +2,7 @@
 
 prefix="-f ./cs_sock -p"
 client="$1 $prefix"
+# client="valgrind --leak-check=full $1 $prefix"
 idir="$(pwd)/tdir"
 delay=200
 

@@ -16,22 +16,22 @@
 
 // To communicate file's data, in/out from the "file_system"
 typedef struct {
-    int nameLen;
+    size_t nameLen;
     const char* name;
-    int contentLen;
+    size_t contentLen;
     const char* content;
 } FSFile_t;
 
 // Configs to pass at initialization
 typedef struct {
-    int tableSize;           // 2^8 (very small) -> 2^30 (very big)
+    size_t tableSize;           // 2^8 (very small) -> 2^30 (very big)
     int maxFileCapacitySlot; // 1 ~> 1'000'000
     int maxFileCapacityMB;   // 1MB ~> 512MB
 } FSConfig_t;
 
 // State
 typedef struct {
-    long long bytesUsedCount;
+    size_t bytesUsedCount;
     int slotsUsedCount;
     int capacityMissCount;
 } FSInfo_t;

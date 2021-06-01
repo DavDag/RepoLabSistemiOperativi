@@ -833,7 +833,7 @@ void summary() {
 
     // Calc stats
     int slotU = gCache.slotUsed , slotM = gCache.slotMax , slotP = gMaxSlotUsed;
-    long long bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
+    size_t bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
     int capMisT = gCapacityMisses, capMisA = (int)((float) gCapacityMisses / gQueryCount * 100.0f), capMisM = gCapacityMissesMax;
 
     // Separator

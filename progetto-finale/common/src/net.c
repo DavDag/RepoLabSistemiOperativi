@@ -11,6 +11,8 @@
 // #define DEBUG_MESSAGES
 // #define DEBUG_MESSAGES_CONTENT
 
+#define COMPRESS_MESSAGES
+
 // ======================================= DECLARATIONS: Inner functions ============================================
 
 /**
@@ -25,7 +27,7 @@ void writeToBuffer(char** buf, const void* data, size_t size);
  */
 void readFromBuffer(char** buf, void* data, size_t size);
 
-void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull);
+void convertOffsetToPtr(char* begin, MsgPtr_t* data, size_t isNotNull);
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
 size_t calcMsgSize(SockMessage_t* msg);
 
@@ -65,6 +67,17 @@ size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) 
     if ((res = readN(socketfd, buffer, sizeof(char) * msgSize)) != 1)
         return res;
     
+#ifdef COMPRESS_MESSAGES
+    HuffCodingResult_t result = decompress_data(buffer, msgSize);
+    free(buffer);
+    *buf    = result.data;
+    *size   = result.size;
+    buffer  = result.data;
+    bbegin  = result.data;
+    // LOG_WARN("%ld / %ld", msgSize, result.size);
+    msgSize = result.size;
+#endif
+
     // 3. Read message (from temp buffer)
     
     // UID
@@ -103,10 +116,10 @@ size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) 
 
             // File
             MsgFile_t file;
-            readFromBuffer(&buffer, &file.filename.len  , sizeof(int));
-            readFromBuffer(&buffer, &file.filename.abs.i, sizeof(int));
-            readFromBuffer(&buffer, &file.contentLen    , sizeof(int));
-            readFromBuffer(&buffer, &file.content.i     , sizeof(int));
+            readFromBuffer(&buffer, &file.filename.len  , sizeof(size_t));
+            readFromBuffer(&buffer, &file.filename.abs.i, sizeof(size_t));
+            readFromBuffer(&buffer, &file.contentLen    , sizeof(size_t));
+            readFromBuffer(&buffer, &file.content.i     , sizeof(size_t));
             msg->request.file = file;
             break;
         }
@@ -132,10 +145,10 @@ size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) 
             if (numFiles > 0) {
                 files = (MsgFile_t*) mem_calloc(numFiles, sizeof(MsgFile_t));
                 for (int i = 0; i < numFiles; ++i) {
-                    readFromBuffer(&buffer, &files[i].filename.len  , sizeof(int));
-                    readFromBuffer(&buffer, &files[i].filename.abs.i, sizeof(int));
-                    readFromBuffer(&buffer, &files[i].contentLen    , sizeof(int));
-                    readFromBuffer(&buffer, &files[i].content.i     , sizeof(int));
+                    readFromBuffer(&buffer, &files[i].filename.len  , sizeof(size_t));
+                    readFromBuffer(&buffer, &files[i].filename.abs.i, sizeof(size_t));
+                    readFromBuffer(&buffer, &files[i].contentLen    , sizeof(size_t));
+                    readFromBuffer(&buffer, &files[i].content.i     , sizeof(size_t));
                 }
             }
             msg->response.files = files;
@@ -270,11 +283,11 @@ size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg)
 
             // File
             MsgFile_t file = msg->request.file;
-            writeToBuffer(&buffer, &file.filename.len, sizeof(int)); // Filename length
-            writeToBuffer(&buffer, &rawBufferIndex   , sizeof(int)); // Filename ptr offset of abs path
+            writeToBuffer(&buffer, &file.filename.len, sizeof(size_t)); // Filename length
+            writeToBuffer(&buffer, &rawBufferIndex   , sizeof(size_t)); // Filename ptr offset of abs path
             rawBufferIndex += file.filename.len;
-            writeToBuffer(&buffer, &file.contentLen  , sizeof(int)); // Content length
-            writeToBuffer(&buffer, &rawBufferIndex   , sizeof(int)); // Content ptr offset
+            writeToBuffer(&buffer, &file.contentLen  , sizeof(size_t)); // Content length
+            writeToBuffer(&buffer, &rawBufferIndex   , sizeof(size_t)); // Content ptr offset
             rawBufferIndex += file.contentLen;
             break;
         }
@@ -298,11 +311,11 @@ size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg)
             const int numFiles = msg->response.numFiles;
             MsgFile_t* files = msg->response.files;
             for (int i = 0; i < numFiles; ++i) {
-                writeToBuffer(&buffer, &files[i].filename.len, sizeof(int)); // Filename length
-                writeToBuffer(&buffer, &rawBufferIndex       , sizeof(int)); // Filename ptr offset of abs path
+                writeToBuffer(&buffer, &files[i].filename.len, sizeof(size_t)); // Filename length
+                writeToBuffer(&buffer, &rawBufferIndex       , sizeof(size_t)); // Filename ptr offset of abs path
                 rawBufferIndex += files[i].filename.len;
-                writeToBuffer(&buffer, &files[i].contentLen  , sizeof(int)); // Content length
-                writeToBuffer(&buffer, &rawBufferIndex       , sizeof(int)); // Content ptr offset
+                writeToBuffer(&buffer, &files[i].contentLen  , sizeof(size_t)); // Content length
+                writeToBuffer(&buffer, &rawBufferIndex       , sizeof(size_t)); // Content ptr offset
                 rawBufferIndex += files[i].contentLen;
             }
             break;
@@ -356,6 +369,17 @@ size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg)
         default:
             break;
     }
+
+#ifdef COMPRESS_MESSAGES
+    HuffCodingResult_t result = compress_data(bbegin, msgSize);
+    free(bbegin);
+    *buf    = result.data;
+    *size   = result.size;
+    buffer  = result.data;
+    bbegin  = result.data;
+    // LOG_WARN("%ld / %ld", msgSize, result.size);
+    msgSize = result.size;
+#endif
 
     // 2. Write buffer (into socket)
     if ((res = writeN(socketfd, (char*) &msgSize, sizeof(size_t))) != 1)
@@ -485,7 +509,7 @@ void readFromBuffer(char** buf, void* data, size_t size) {
     *buf += size;
 }
 
-void convertOffsetToPtr(char* begin, MsgPtr_t* data, int isNotNull) {
+void convertOffsetToPtr(char* begin, MsgPtr_t* data, size_t isNotNull) {
     data->ptr = (!isNotNull) ? NULL : (begin + data->i);
 }
 
@@ -512,7 +536,7 @@ size_t calcMsgSize(SockMessage_t* msg) {
         case MSG_REQ_WRITE_FILE:
         case MSG_REQ_APPEND_TO_FILE:
             totalSize += sizeof(int);
-            totalSize += 4 * sizeof(int);
+            totalSize += 4 * sizeof(size_t);
             totalSize += msg->request.file.filename.len;
             totalSize += msg->request.file.contentLen;
             break;
@@ -524,7 +548,7 @@ size_t calcMsgSize(SockMessage_t* msg) {
         case MSG_RESP_WITH_FILES:
             totalSize += sizeof(RespStatus_t);
             totalSize += sizeof(int);
-            totalSize += msg->response.numFiles * 4 * sizeof(int);
+            totalSize += msg->response.numFiles * 4 * sizeof(size_t);
             for (int i = 0; i < msg->response.numFiles; ++i) {
                 totalSize += msg->response.files[i].filename.len;
                 totalSize += msg->response.files[i].contentLen;

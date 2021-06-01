@@ -530,7 +530,7 @@ int handleOption(int index) {
             
             // Read file content
             char* content  = NULL;
-            int contentLen = 0;
+            size_t contentLen = 0;
             if (read_entire_file(fileToRead, &content, &contentLen) < 0) {
                 LOG_ERRNO("Error reading file '%s'", fileToRead);
                 break;
