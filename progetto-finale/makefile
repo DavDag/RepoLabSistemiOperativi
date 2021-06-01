@@ -18,7 +18,7 @@ export
 TARGETS := all clean
 SUBDIRS := common server serverapi client
 
-.PHONY: $(TARGETS) $(SUBDIRS) run-client run-valgrind-client run-server run-valgrind-server
+.PHONY: $(TARGETS) $(SUBDIRS) all-db all-comp test1 test2 test3 clean-files
 
 $(TARGETS): $(SUBDIRS)
 $(SUBDIRS):

@@ -120,4 +120,4 @@ done
 
 wait
 
-rm -f Available
+rm -f Available;

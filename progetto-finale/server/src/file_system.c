@@ -834,7 +834,7 @@ void summary() {
     // Calc stats
     int slotU = gCache.slotUsed , slotM = gCache.slotMax , slotP = gMaxSlotUsed;
     size_t bytesU = gCache.bytesUsed, bytesM = gCache.bytesMax, bytesP = gMaxBytesUsed;
-    int capMisT = gCapacityMisses, capMisA = (int)((float) gCapacityMisses / gQueryCount * 100.0f), capMisM = gCapacityMissesMax;
+    int capMisT = gCapacityMisses, capMisA = (gQueryCount == 0) ? 0 : (int)((float) gCapacityMisses / gQueryCount * 100.0f), capMisM = gCapacityMissesMax;
 
     // Separator
     LOG_EMPTY("  %c", CC); TIMES(fCSize, LOG_EMPTY("%c", CH)); LOG_EMPTY("%c", CC); TIMES(sCSize, LOG_EMPTY("%c", CH)); 

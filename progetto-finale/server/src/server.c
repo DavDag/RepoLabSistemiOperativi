@@ -263,6 +263,14 @@ void signalHandlerCallback(int signum) {
 void setupSignals() {
     LOG_VERB("[#MN] Registering signals...");
 
+    // Mask signals until handlers are set
+    sigset_t set;
+    if (sigemptyset(&set) < 0) { LOG_ERRNO("[#MN] Error during signal setup"); }
+    if (sigaddset(&set, SIGINT) < 0) { LOG_ERRNO("[#MN] Error during signal setup"); }
+    if (sigaddset(&set, SIGQUIT) < 0) { LOG_ERRNO("[#MN] Error during signal setup"); }
+    if (sigaddset(&set, SIGHUP) < 0) { LOG_ERRNO("[#MN] Error during signal setup"); }
+    if (pthread_sigmask(SIG_SETMASK, &set, NULL) < 0) { LOG_ERRNO("[#MN] Error during signal setup"); }
+
     // Signal list
     static int signals[] = { SIGINT, SIGQUIT, SIGHUP };
 
@@ -277,6 +285,13 @@ void setupSignals() {
             LOG_WARN("[#MN] Server is using the default handler");
         }
     }
+
+    // Remove mask
+    sigemptyset(&set);
+    pthread_sigmask(SIG_SETMASK, &set, NULL);
+
+    // SIGPIPE
+    signal(SIGPIPE, SIG_IGN);
 }
 
 int setupSocket() {
