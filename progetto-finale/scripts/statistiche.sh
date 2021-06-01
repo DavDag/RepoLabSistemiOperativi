@@ -21,6 +21,9 @@ TOTAL_OFCOUNT=0  # Total open file op
 TOTAL_OSCOUNT=0  # Total open session op 
 TOTAL_CSCOUNT=0  # Total close session op 
 TOTAL_LNCOUNT=0  # Total lock notification sent
+TOTAL_FSWSUM=0   # Total bytes written into the fs
+TOTAL_NRSUM=0    # Total bytes read from network
+TOTAL_NWSUM=0    # Total bytes written into network
 MAX_SIZE_BYTES=0 # Maximum size reached in bytes (file-system)
 MAX_SIZE_SLOT=0  # Maximum size reached in slot (file-system)
 TOTAL_CACOUNT=0  # Total capacity misses
@@ -100,8 +103,8 @@ do
                 MAX_SAME_CC=$((MAX_SAME_CC > value ? MAX_SAME_CC : value))
                 ;;
             
-            # Bytes wrote
-            W)
+            # Real bytes wrote
+            w)
                 if [[ $optype == "RF" ]]
                 then
                     TOTAL_RFSUM=$(( TOTAL_RFSUM + value ))
@@ -113,18 +116,33 @@ do
                 fi
                 ;;
             
-            # Bytes read
-            R)
+            # Bytes wrote
+            W)
+                TOTAL_NWSUM=$(( TOTAL_NWSUM + value ))
+                ;;
+            
+            # Real bytes read
+            r)
                 if [[ $optype == "WF" ]]
                 then
                     TOTAL_WSUM=$(( TOTAL_WSUM + value ))
                     TOTAL_WCOUNT=$(( TOTAL_WCOUNT + 1 ))
                 fi
                 ;;
+
+            # Bytes read
+            R)
+                TOTAL_NRSUM=$(( TOTAL_NRSUM + value ))
+                ;;
             
             # File System size (Bytes)
             FS-B)
                 MAX_SIZE_BYTES=$((MAX_SIZE_BYTES > value ? MAX_SIZE_BYTES : value))
+                if [[ $(( value - lastValFSWSUM )) -gt 0 ]]
+                then
+                    TOTAL_FSWSUM=$(( TOTAL_FSWSUM + (value - lastValFSWSUM) ))
+                fi
+                lastValFSWSUM=$(( value ))
                 ;;
             
             # File System size (Slot)
@@ -147,6 +165,9 @@ done < $LOG_FILE
 AVG_RF=$(( TOTAL_RFCOUNT == 0 ? 0 : TOTAL_RFSUM / TOTAL_RFCOUNT ))
 AVG_RN=$(( TOTAL_RNCOUNT == 0 ? 0 : TOTAL_RNSUM / TOTAL_RNCOUNT ))
 AVG_WF=$(( TOTAL_WCOUNT == 0 ? 0 : TOTAL_WSUM / TOTAL_WCOUNT ))
+
+COM_EFF_W=$(( 100 - (TOTAL_NRSUM * 100 / TOTAL_WSUM) ))
+COM_EFF_R=$(( (TOTAL_RNSUM + TOTAL_RFSUM) == 0 ? 0 : 100 - (TOTAL_NWSUM * 100 / (TOTAL_RNSUM + TOTAL_RFSUM) ) ))
 
 conv_bytes() {
     if [[ $1 -lt 1024 ]]
@@ -173,8 +194,12 @@ echo "+--------------------------------------+"
 echo "| Avg bytes (READ-FILE)  => $(conv_bytes $AVG_RF) |"
 echo "| Avg bytes (READ-N)     => $(conv_bytes $AVG_RN) |"
 echo "| Avg bytes (WRITE-FILE) => $(conv_bytes $AVG_WF) |"
-echo "| Total bytes (READ)     => $(conv_bytes $(( $TOTAL_RNSUM + $TOTAL_RFSUM )) ) |"
-echo "| Total bytes (WRITTEN)  => $(conv_bytes $TOTAL_WSUM) |"
+echo "| File bytes (READ)      => $(conv_bytes $(( $TOTAL_RNSUM + $TOTAL_RFSUM )) ) |"
+echo "| File bytes (WRITTEN)   => $(conv_bytes $TOTAL_WSUM) |"
+echo "| Net bytes (WRITTEN)    => $(conv_bytes $TOTAL_NWSUM) |"
+echo "| Net bytes (READ)       => $(conv_bytes $TOTAL_NRSUM) |"
+echo "| Compression eff (W):   => $(printf "%8d" $COM_EFF_W) % |"
+echo "| Compression eff (R):   => $(printf "%8d" $COM_EFF_R) % |"
 echo "+--------------------------------------+"
 echo "| Count (READ-FILE)      => $(printf "%10d" $TOTAL_RFCOUNT) |"
 echo "| Count (READ-N)         => $(printf "%10d" $TOTAL_RNCOUNT) |"
@@ -189,6 +214,7 @@ echo "| Count (OPEN-SESSION)   => $(printf "%10d" $TOTAL_OSCOUNT) |"
 echo "| Count (CLOSE-SESSION)  => $(printf "%10d" $TOTAL_CSCOUNT) |"
 echo "| Count (LOCK-NOT)       => $(printf "%10d" $TOTAL_LNCOUNT) |"
 echo "+--------------------------------------+"
+echo "| File bytes written FS  => $(conv_bytes $TOTAL_FSWSUM) |"
 echo "| Max FS size (Bytes)    => $(conv_bytes $MAX_SIZE_BYTES) |"
 echo "| Max FS size (Slots)    => $(printf "%10d" $MAX_SIZE_SLOT) |"
 echo "| Count capacity misses  => $(printf "%10d" $TOTAL_CACOUNT) |"

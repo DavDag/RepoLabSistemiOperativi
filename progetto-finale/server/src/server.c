@@ -62,7 +62,7 @@ SockMessage_t handleWork(int, int, SockMessage_t);
 void handleError(int, SockMessage_t*);
 FSFile_t copyRequestIntoFile(SockMessage_t);
 FSFile_t deepCopyRequestIntoFile(SockMessage_t);
-void log_into_file(SockMessage_t*, RespStatus_t, long long, size_t, size_t, int, int);
+void log_into_file(SockMessage_t*, SockMessage_t*, long long, size_t, size_t, int, int);
 
 // ======================================= DEFINITIONS: Global vars =================================================
 
@@ -367,7 +367,7 @@ void* workerThreadFun(void* args) {
     while (!gSigIntReceived && !gSigQuitReceived && !(gSigHupReceived && (numClientConnected() == 0))) {
         // Vars
         CircQueueItemPtr_t item = NULL;
-        long long bytesRead = 0, bytesWrote = 0;
+        long long bytesRead = 0, bytesWritten = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gWorkMutex);
@@ -427,7 +427,7 @@ void* workerThreadFun(void* args) {
         } else {
             LOG_VERB("[#%.2d] work completed. Sending response...", threadID);
             // Write response to client
-            if ((bytesWrote = writeMessage(client, &_inn_buffer, &innerBufferSize, &responseMsg)) == -1)
+            if ((bytesWritten = writeMessage(client, &_inn_buffer, &innerBufferSize, &responseMsg)) == -1)
                 LOG_ERRNO("Error sending response");
             // Readd descriptor to set
             int messageToSend[2] = { SET_CONNECTION, client };
@@ -435,7 +435,7 @@ void* workerThreadFun(void* args) {
         }
         clock_gettime(CLOCK_MONOTONIC, &end);
         // Log request
-        log_into_file(&requestMsg, responseMsg.response.status, ELAPSED_MICR_S(end, begin), bytesRead, bytesWrote, threadID, client);
+        log_into_file(&requestMsg, &responseMsg, ELAPSED_MICR_S(end, begin), bytesRead, bytesWritten, threadID, client);
        
         // Release resources
         freeMessageContent(&requestMsg , 1);
@@ -585,7 +585,7 @@ void* lockThreadFun(void* args) {
     while (!gSigIntReceived && !gSigQuitReceived && !gShouldStopWorking) {
         // Reset item
         CircQueueItemPtr_t item = NULL;
-        long long bytesWrote = 0;
+        long long bytesWritten = 0;
 
         // Lock mutex and wait on cond (if queue is empty)
         lock_mutex(&gLockMutex);
@@ -624,7 +624,7 @@ void* lockThreadFun(void* args) {
 
         // Write response to client
         LOG_VERB("[#LK] Notification arrived. Sending %d to %d...", msg.response.status, notification.fd);
-        if ((bytesWrote = writeMessage(notification.fd, &_inn_buff, &innerBufferSize, &msg)) == -1)
+        if ((bytesWritten = writeMessage(notification.fd, &_inn_buff, &innerBufferSize, &msg)) == -1)
             LOG_ERRNO("Error sending response");
 
         // Readd descriptor to set
@@ -636,7 +636,7 @@ void* lockThreadFun(void* args) {
         
         // Log request
         SockMessage_t tmp = { .type = MSG_REQ_LOCK_FILE, .uid = EMPTY_UUID };
-        log_into_file(&tmp, msg.response.status, 0LL, 0LL, bytesWrote, LOCK_THREAD_ID, notification.fd);
+        log_into_file(&tmp, &msg, 0LL, 0LL, bytesWritten, LOCK_THREAD_ID, notification.fd);
     }
     free(_inn_buff);
     return NULL;
@@ -1086,7 +1086,7 @@ FSFile_t deepCopyRequestIntoFile(SockMessage_t msg) {
     return fs_file;
 }
 
-void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, size_t bytesRead, size_t bytesWrote, int workingThreadID, int client) {
+void log_into_file(SockMessage_t* msg, SockMessage_t* resp, long long msec, size_t bytesRead, size_t bytesWritten, int workingThreadID, int client) {
     SockMessageType_t type = msg->type;
     if (type == MSG_REQ_OPEN_FILE) {
         type = 50 | msg->request.flags;
@@ -1124,18 +1124,22 @@ void log_into_file(SockMessage_t* msg, RespStatus_t status, long long msec, size
     int connectedClientCount = gNumClientConnected;
     unlock_mutex(&gNumClientMutex);
 
+    // Real bytes
+    size_t realBytesRead    = calcMsgSize(msg);
+    size_t realBytesWritten = calcMsgSize(resp);
+
     // Log data
     lock_mutex(&gLogMutex);
     if (workingThreadID == LOCK_THREAD_ID) {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%12ld | W:%12ld | FS-B:%12ld | FS-S:%4d | FS-M:%4d |\n",
-            UUID_to_String(msg->uid), timeInMsFromBegin, msec, opTable[type], client, connectedClientCount, bytesRead,
-            bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%9lld | ms: %7lld | [#LK] {%s} | C-ID:%3d | CC:%4d | R:%9ld | r:%9ld | W:%9ld | w:%9ld | FS-B:%9ld | FS-S:%4d | FS-M:%4d |\n",
+            UUID_to_String(msg->uid), timeInMsFromBegin, msec, opTable[type], client, connectedClientCount, bytesRead, realBytesRead,
+            bytesWritten, realBytesWritten, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     } else {
         FSInfo_t info = fs_get_infos();
-        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%12lld | ms: %8lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%12ld | W:%12ld | FS-B:%12ld | FS-S:%4d | FS-M:%4d |\n", 
-            UUID_to_String(msg->uid),timeInMsFromBegin, msec, workingThreadID, opTable[type], client, connectedClientCount, bytesRead,
-            bytesWrote, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
+        LOG_EMPTY_INTO_STREAM(gLogFile, "%s | T:%9lld | ms: %7lld | [#%.2d] {%s} | C-ID:%3d | CC:%4d | R:%9ld | r:%9ld | W:%9ld | w:%9ld | FS-B:%9ld | FS-S:%4d | FS-M:%4d |\n", 
+            UUID_to_String(msg->uid),timeInMsFromBegin, msec, workingThreadID, opTable[type], client, connectedClientCount, bytesRead, realBytesRead,
+            bytesWritten, realBytesWritten, info.bytesUsedCount, info.slotsUsedCount, info.capacityMissCount);
     }
     unlock_mutex(&gLogMutex);
 }

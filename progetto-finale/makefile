@@ -32,10 +32,16 @@ all-db:
 	$(MAKE) -C . clean
 	$(MAKE) -C . all
 
+all-comp:
+	$(eval CFLAGS += -DCOMPRESS_MESSAGES)
+	$(MAKE) -C . clean
+	$(MAKE) -C . all
+
 clean: resettest
 	@rm -f ./log-test1.txt
 	@rm -f ./log-test2.txt
 	@rm -f ./log-test3.txt
+	@rm -f ./Available
 
 test1: resettest | addperm files
 	@valgrind --leak-check=full $(SERVER_EXE) ./configs/test1.txt & \

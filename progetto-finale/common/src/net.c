@@ -11,7 +11,7 @@
 // #define DEBUG_MESSAGES
 // #define DEBUG_MESSAGES_CONTENT
 
-#define COMPRESS_MESSAGES
+// #define COMPRESS_MESSAGES
 
 // ======================================= DECLARATIONS: Inner functions ============================================
 
@@ -29,7 +29,6 @@ void readFromBuffer(char** buf, void* data, size_t size);
 
 void convertOffsetToPtr(char* begin, MsgPtr_t* data, size_t isNotNull);
 void convertPtrToOffset(char* begin, MsgPtr_t* data);
-size_t calcMsgSize(SockMessage_t* msg);
 
 // ======================================= DEFINITIONS: net.h functions =============================================
 
@@ -75,7 +74,6 @@ size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) 
     buffer  = result.data;
     bbegin  = result.data;
     // LOG_WARN("%ld / %ld", msgSize, result.size);
-    msgSize = result.size;
 #endif
 
     // 3. Read message (from temp buffer)
@@ -167,7 +165,11 @@ size_t readMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg) 
 #endif
 
     // Raw content
+#ifdef COMPRESS_MESSAGES
+    size_t rawBytes = result.size - (buffer - bbegin);
+#else
     size_t rawBytes = msgSize - (buffer - bbegin);
+#endif
     msg->raw_content = NULL;
     if (rawBytes) {
         // Read raw content

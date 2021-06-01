@@ -141,6 +141,11 @@ size_t writeMessage(long socketfd, char** buf, size_t* size, SockMessage_t* msg)
 void freeMessageContent(SockMessage_t* msg, int deep);
 
 /**
+ * Estimate real messsage size.
+ */
+size_t calcMsgSize(SockMessage_t* msg);
+
+/**
  * Read EXACLTY N bytes from the filedescriptor 'fd'
  * 
  * \retval -1: on error (errno set)
